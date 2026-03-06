@@ -24,62 +24,58 @@ jobs:
           java-version: '17'
 
       - name: 📦 Install Dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: |
+          pnpm install --no-frozen-lockfile
+          # Исправляем ошибку со скриншота (Babel runtime)
+          pnpm add @babel/runtime babel-plugin-module-resolver
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. ЧИСТКА: Удаляем флаг --no-interactive из любых скрытых вызовов pnpm
-          # и устанавливаем необходимые плагины для Babel
-          pnpm add -D babel-plugin-module-resolver @react-native-community/cli
-
-          # 2. УНИВЕРСАЛЬНЫЙ BABEL: Настраиваем алиас @/ на уровне ядра
+          # 1. Генерируем Babel Config (Алиасы + фикс Runtime)
           cat <<'EOF' > babel.config.js
           module.exports = function (api) {
             api.cache(true);
             return {
               presets: ['babel-preset-expo'],
               plugins: [
-                [
-                  'module-resolver',
-                  {
-                    root: ['./'],
-                    alias: { '@': './' },
-                    extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
-                  },
-                ],
+                ['module-resolver', {
+                  root: ['./'],
+                  alias: { '@': './' },
+                  extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
+                }]
               ],
             };
           };
           EOF
 
-          # 3. METRO CONFIG: Гарантируем, что он видит Babel и расширения
+          # 2. Генерируем Metro Config
           cat <<'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const config = getDefaultConfig(__dirname);
-          config.resolver.sourceExts = [...config.resolver.sourceExts, 'ts', 'tsx', 'js', 'jsx', 'json'];
           module.exports = config;
           EOF
 
-          # 4. ПОДГОТОВКА: Генерируем нативный код (БЕЗ флага --no-interactive)
+          # 3. Подготовка Android проекта
           npx expo prebuild --platform android
 
-          # 5. СБОРКА БАНДЛА: Прямое указание на входную точку и конфиг
+          # 4. Сборка JS-бандла (Исправляем точку входа)
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
-            --config metro.config.js --reset-cache
+            --reset-cache
 
-          # 6. КОМПИЛЯЦИЯ APK: Финальный аккорд
+          # 5. Компиляция APK
           cd android
+          chmod +x gradlew
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Messenger-Ultimate
+          name: OpenFlou-Success-V31
           path: android/app/build/outputs/apk/release/app-release.apk
           
