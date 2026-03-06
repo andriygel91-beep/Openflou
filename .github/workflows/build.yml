@@ -19,7 +19,7 @@ jobs:
         with:
           version: 8
 
-      - name: 📦 Install CLI Tools
+      - name: 📦 Install Tools
         run: pnpm add -g eas-cli expo-cli
 
       - name: 📦 Install Dependencies
@@ -29,7 +29,13 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          # 1. Принудительная привязка проекта
           npx eas-cli project:init --non-interactive --force
+          
+          # 2. Создаем ключи (Keystore) в аккаунте Expo
+          npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+          
+          # 3. Запускаем локальную сборку APK
           npx eas-cli build --platform android --profile preview --local --non-interactive
 
       - name: 📂 Upload Result
