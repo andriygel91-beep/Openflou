@@ -29,12 +29,10 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Инициализируем проект, если он не настроен
-          npx eas-cli project:init --non-interactive
-          # Запускаем локальную сборку
+          npx eas-cli project:init --non-interactive --force
           npx eas-cli build --platform android --profile preview --local --non-interactive
-          
-      - name: 📂 Upload APK
+
+      - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
           name: messenger-app-apk
