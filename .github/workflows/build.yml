@@ -24,27 +24,26 @@ jobs:
           java-version: '17'
 
       - name: 📦 Install Dependencies
-        # Флаг --no-frozen-lockfile лечит ошибку со скриншота #34
         run: pnpm install --no-frozen-lockfile
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Устанавливаем CLI, который требовал лог на скриншоте #41
+          # Устанавливаем CLI
           pnpm add -D @react-native-community/cli
           
-          # Генерация нативного кода
+          # Генерируем нативный код (исправил положение флагов)
           npx expo prebuild --platform android --no-interactive
           
-          # Создание папки и бандла (лечит белый экран)
+          # Создаем папку и бандл для борьбы с белым экраном
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res
           
-          # Финальная сборка APK
+          # Финальная упаковка APK
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
