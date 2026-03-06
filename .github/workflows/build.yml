@@ -30,7 +30,11 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Создаем универсальный Babel Config (для поддержки @/ везде)
+          # 1. ЧИСТКА: Удаляем флаг --no-interactive из любых скрытых вызовов pnpm
+          # и устанавливаем необходимые плагины для Babel
+          pnpm add -D babel-plugin-module-resolver @react-native-community/cli
+
+          # 2. УНИВЕРСАЛЬНЫЙ BABEL: Настраиваем алиас @/ на уровне ядра
           cat <<'EOF' > babel.config.js
           module.exports = function (api) {
             api.cache(true);
@@ -42,6 +46,7 @@ jobs:
                   {
                     root: ['./'],
                     alias: { '@': './' },
+                    extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
                   },
                 ],
               ],
@@ -49,33 +54,32 @@ jobs:
           };
           EOF
 
-          # 2. Создаем Metro Config, который подхватит Babel
+          # 3. METRO CONFIG: Гарантируем, что он видит Babel и расширения
           cat <<'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const config = getDefaultConfig(__dirname);
+          config.resolver.sourceExts = [...config.resolver.sourceExts, 'ts', 'tsx', 'js', 'jsx', 'json'];
           module.exports = config;
           EOF
 
-          # 3. Устанавливаем плагин для резолвинга путей
-          pnpm add -D babel-plugin-module-resolver @react-native-community/cli
+          # 4. ПОДГОТОВКА: Генерируем нативный код (БЕЗ флага --no-interactive)
+          npx expo prebuild --platform android
 
-          # 4. Предсборка
-          npx expo prebuild --platform android --no-interactive
-          
-          # 5. Сборка бандла (теперь Babel сам поймет, что такое @/)
+          # 5. СБОРКА БАНДЛА: Прямое указание на входную точку и конфиг
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
-            --reset-cache
+            --config metro.config.js --reset-cache
 
-          # 6. Финальная компиляция APK
+          # 6. КОМПИЛЯЦИЯ APK: Финальный аккорд
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Universal-V29
+          name: OpenFlou-Messenger-Ultimate
           path: android/app/build/outputs/apk/release/app-release.apk
+          
