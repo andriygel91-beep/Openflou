@@ -95,13 +95,22 @@ export default function SettingsTab() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom }}>
         {/* User Profile */}
-        <View style={[styles.profileSection, { backgroundColor: colors.surface }]}>
+        <Pressable
+          onPress={() => router.push('/edit-profile')}
+          style={({ pressed }) => [
+            styles.profileSection,
+            {
+              backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
+            },
+          ]}
+        >
           <Avatar uri={currentUser?.avatar} username={currentUser?.username} size={64} colors={colors} />
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: colors.text }]}>{currentUser?.username}</Text>
             <Text style={[styles.profileStatus, { color: colors.online }]}>{t.online}</Text>
           </View>
-        </View>
+          <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
+        </Pressable>
 
         {/* Appearance */}
         <View style={styles.section}>

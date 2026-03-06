@@ -120,12 +120,26 @@ export default function ChatsTab() {
       </Pressable>
       
       <Pressable
-        onPress={() => router.push('/create-group')}
+        onPress={() => router.push('/create-channel')}
         style={({ pressed }) => [
           styles.fab,
           {
             backgroundColor: colors.surfaceSecondary,
             bottom: insets.bottom + 148,
+            opacity: pressed ? 0.8 : 1,
+          },
+        ]}
+      >
+        <MaterialIcons name="campaign" size={24} color={colors.primary} />
+      </Pressable>
+      
+      <Pressable
+        onPress={() => router.push('/create-group')}
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            backgroundColor: colors.surfaceSecondary,
+            bottom: insets.bottom + 216,
             opacity: pressed ? 0.8 : 1,
           },
         ]}

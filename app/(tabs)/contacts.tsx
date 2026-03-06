@@ -1,6 +1,7 @@
 // Openflou Contacts Tab
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Platform } from 'react-native';
+import * as Contacts from 'expo-contacts';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
@@ -30,6 +31,31 @@ export default function ContactsTab() {
   useEffect(() => {
     loadContacts();
   }, []);
+
+  async function importFromPhoneContacts() {
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      
+      if (status !== 'granted') {
+        showAlert('Permission to access contacts was denied');
+        return;
+      }
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
+      });
+
+      if (data.length === 0) {
+        showAlert(t.noContacts);
+        return;
+      }
+
+      showAlert(`Found ${data.length} contacts. Feature in development.`);
+    } catch (error) {
+      showAlert('Error importing contacts');
+      console.error(error);
+    }
+  }
 
   useEffect(() => {
     handleSearch();
@@ -136,6 +162,22 @@ export default function ContactsTab() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.contacts}</Text>
+        
+        <Pressable
+          onPress={importFromPhoneContacts}
+          style={({ pressed }) => [
+            styles.importButton,
+            {
+              backgroundColor: colors.primary,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
+        >
+          <MaterialIcons name="contacts" size={18} color={colors.textInverted} />
+          <Text style={[styles.importButtonText, { color: colors.textInverted }]}>
+            {t.importFromContacts}
+          </Text>
+        </Pressable>
         
         <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
           <MaterialIcons name="search" size={20} color={colors.icon} />
@@ -247,7 +289,21 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
+    includeFontPadding: false,
+  },
+  importButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginTop: 8,
     marginBottom: 12,
+  },
+  importButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
     includeFontPadding: false,
   },
   searchContainer: {

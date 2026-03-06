@@ -51,6 +51,8 @@ export const translations = {
     tryDifferentQuery: 'Try a different search',
     noContacts: 'No contacts yet',
     noContactsDesc: 'Search by username to add contacts',
+    importFromContacts: 'Import from Contacts',
+    phoneContacts: 'Phone Contacts',
     
     // Settings
     account: 'Account',
@@ -64,6 +66,7 @@ export const translations = {
     help: 'Help & Support',
     aiAssistant: 'AI Assistant',
     logout: 'Logout',
+    editProfile: 'Edit Profile',
     
     // AI Assistant
     aiTitle: 'Gemini Assistant',
@@ -73,11 +76,15 @@ export const translations = {
     // Group/Channel
     createGroup: 'Create Group',
     createChannel: 'Create Channel',
+    editGroup: 'Edit Group',
+    editChannel: 'Edit Channel',
     groupName: 'Group Name',
     channelName: 'Channel Name',
+    channelDescription: 'Channel Description',
     addMembers: 'Add Members',
     admin: 'Admin',
     member: 'Member',
+    subscribers: 'subscribers',
     
     // Actions
     send: 'Send',
@@ -164,15 +171,17 @@ export const translations = {
     file: 'Файл',
     
     // Contacts
-    searchContacts: 'Пошук контактів',
-    searchByUsername: 'Пошук по імені користувача',
-    addContact: 'Додати контакт',
-    contactAdded: 'Контакт додано',
-    alreadyInContacts: 'Вже в контактах',
+    searchContacts: 'Поиск контактов',
+    searchByUsername: 'Поиск по имени пользователя',
+    addContact: 'Добавить контакт',
+    contactAdded: 'Контакт добавлен',
+    alreadyInContacts: 'Уже в контактах',
     notInContacts: 'Не в контактах',
-    tryDifferentQuery: 'Спробуйте інший запит',
-    noContacts: 'Немає контактів',
-    noContactsDesc: 'Знайдіть користувачів за іменем',
+    tryDifferentQuery: 'Попробуйте другой запрос',
+    noContacts: 'Нет контактов',
+    noContactsDesc: 'Найдите пользователей по имени',
+    importFromContacts: 'Импорт из контактов',
+    phoneContacts: 'Контакты телефона',
     
     // Settings
     account: 'Аккаунт',
@@ -186,6 +195,7 @@ export const translations = {
     help: 'Помощь и поддержка',
     aiAssistant: 'AI Ассистент',
     logout: 'Выйти',
+    editProfile: 'Редактировать профиль',
     
     // AI Assistant
     aiTitle: 'Gemini Ассистент',
@@ -195,11 +205,15 @@ export const translations = {
     // Group/Channel
     createGroup: 'Создать группу',
     createChannel: 'Создать канал',
+    editGroup: 'Редактировать группу',
+    editChannel: 'Редактировать канал',
     groupName: 'Название группы',
     channelName: 'Название канала',
+    channelDescription: 'Описание канала',
     addMembers: 'Добавить участников',
     admin: 'Админ',
     member: 'Участник',
+    subscribers: 'подписчиков',
     
     // Actions
     send: 'Отправить',
@@ -295,6 +309,8 @@ export const translations = {
     tryDifferentQuery: 'Спробуйте інший запит',
     noContacts: 'Немає контактів',
     noContactsDesc: 'Знайдіть користувачів за іменем',
+    importFromContacts: 'Імпорт з контактів',
+    phoneContacts: 'Контакти телефону',
     
     // Settings
     account: 'Акаунт',
@@ -308,6 +324,7 @@ export const translations = {
     help: 'Допомога та підтримка',
     aiAssistant: 'AI Асистент',
     logout: 'Вийти',
+    editProfile: 'Редагувати профіль',
     
     // AI Assistant
     aiTitle: 'Gemini Асистент',
@@ -317,11 +334,15 @@ export const translations = {
     // Group/Channel
     createGroup: 'Створити групу',
     createChannel: 'Створити канал',
+    editGroup: 'Редагувати групу',
+    editChannel: 'Редагувати канал',
     groupName: 'Назва групи',
     channelName: 'Назва каналу',
+    channelDescription: 'Опис каналу',
     addMembers: 'Додати учасників',
     admin: 'Адмін',
     member: 'Учасник',
+    subscribers: 'підписників',
     
     // Actions
     send: 'Відправити',

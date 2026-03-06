@@ -190,7 +190,14 @@ export default function ChatScreen() {
           <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>{t.online}</Text>
         </View>
 
-        <Pressable style={styles.headerButton}>
+        <Pressable 
+          onPress={() => {
+            if (chat.type === 'group' || chat.type === 'channel') {
+              router.push(`/edit-chat?id=${chat.id}`);
+            }
+          }}
+          style={styles.headerButton}
+        >
           <MaterialIcons name="more-vert" size={24} color={colors.icon} />
         </Pressable>
       </View>

@@ -15,6 +15,9 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="chat" />
             <Stack.Screen name="create-group" />
+            <Stack.Screen name="create-channel" />
+            <Stack.Screen name="edit-profile" />
+            <Stack.Screen name="edit-chat" />
             <Stack.Screen name="search-messages" />
             <Stack.Screen
               name="ai-assistant"
