@@ -26,41 +26,34 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pnpm install --no-frozen-lockfile
-          # Принудительно ставим CLI и хелперы, чтобы не было ошибки как на фото
           pnpm add -D @react-native-community/cli @babel/runtime babel-plugin-module-resolver
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Создаем Babel Config (лечит проблему с @/ и импортами)
+          # 1. Babel Config
           cat <<'EOF' > babel.config.js
           module.exports = function (api) {
             api.cache(true);
             return {
               presets: ['babel-preset-expo'],
-              plugins: [
-                ['module-resolver', {
-                  root: ['./'],
-                  alias: { '@': './' },
-                  extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
-                }]
-              ],
+              plugins: [['module-resolver', { root: ['./'], alias: { '@': './' } }]],
             };
           };
           EOF
 
-          # 2. Создаем Metro Config
+          # 2. Metro Config
           cat <<'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const config = getDefaultConfig(__dirname);
           module.exports = config;
           EOF
 
-          # 3. Генерируем нативный код Android
+          # 3. Предсборка (здесь подтянутся имя и иконка из app.json)
           npx expo prebuild --platform android
 
-          # 4. СОБИРАЕМ БАНДЛ (через npx, чтобы точно найти установленный CLI)
+          # 4. Сборка бандла
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
@@ -68,14 +61,15 @@ jobs:
             --assets-dest android/app/src/main/res \
             --reset-cache
 
-          # 5. КОМПИЛЯЦИЯ (Добавили chmod для прав доступа)
+          # 5. ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ КОМАНДА (для RN 0.75+)
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -x bundleReleaseJsAndAssets
-
+          # Мы убрали -x bundleReleaseJsAndAssets, так как команда теперь другая
+          ./gradlew assembleRelease
+          
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-V32-Final
+          name: OpenFlou-Final-V33
           path: android/app/build/outputs/apk/release/app-release.apk
           
