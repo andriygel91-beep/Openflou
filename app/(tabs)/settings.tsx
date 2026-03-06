@@ -206,7 +206,7 @@ export default function SettingsTab() {
           <SettingItem
             icon="lock"
             title={t.privacy}
-            onPress={() => showAlert('Privacy settings coming soon')}
+            onPress={() => router.push('/privacy')}
           />
           
           <SettingItem

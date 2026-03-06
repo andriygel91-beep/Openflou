@@ -151,6 +151,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     includeFontPadding: false,
+    lineHeight: 22,
   },
   time: {
     fontSize: 13,
@@ -166,6 +167,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     flex: 1,
     includeFontPadding: false,
+    lineHeight: 20,
   },
   badges: {
     flexDirection: 'row',

@@ -55,32 +55,32 @@ export const lightColors = {
 
 export const darkColors = {
   // Primary
-  primary: '#8774E1',
-  primaryLight: '#A194E8',
-  primaryDark: '#6B5BC7',
+  primary: '#7C9EFF',
+  primaryLight: '#99B3FF',
+  primaryDark: '#5A7FE6',
   
   // Background
-  background: '#0E0E0E',
-  backgroundSecondary: '#1C1C1E',
-  backgroundTertiary: '#2C2C2E',
+  background: '#0A0A0A',
+  backgroundSecondary: '#141414',
+  backgroundTertiary: '#1E1E1E',
   
   // Surface
-  surface: '#1C1C1E',
-  surfaceSecondary: '#2C2C2E',
+  surface: '#141414',
+  surfaceSecondary: '#1E1E1E',
   
   // Message Bubbles
-  bubbleOut: '#8774E1',
-  bubbleIn: '#212121',
+  bubbleOut: '#2A4A7C',
+  bubbleIn: '#1E1E1E',
   
   // Text
   text: '#FFFFFF',
-  textSecondary: '#8E8E93',
-  textTertiary: '#636366',
+  textSecondary: '#A0A0A0',
+  textTertiary: '#6E6E6E',
   textInverted: '#000000',
   
   // Borders & Dividers
-  border: '#2C2C2E',
-  divider: '#38383A',
+  border: '#282828',
+  divider: '#323232',
   
   // Status
   success: '#4CAF50',
@@ -90,21 +90,21 @@ export const darkColors = {
   
   // Online Status
   online: '#4CAF50',
-  offline: '#636366',
+  offline: '#6E6E6E',
   
   // Icons
-  icon: '#8E8E93',
-  iconActive: '#8774E1',
+  icon: '#A0A0A0',
+  iconActive: '#7C9EFF',
   
   // Navigation
-  tabBarBackground: '#1C1C1E',
-  tabBarBorder: '#2C2C2E',
+  tabBarBackground: '#141414',
+  tabBarBorder: '#282828',
   
   // Chat specific
-  chatBackground: '#0E0E0E',
-  messageTime: '#8E8E93',
-  unreadBadge: '#8774E1',
-  pinnedBackground: '#2C2C2E',
+  chatBackground: '#0A0A0A',
+  messageTime: '#A0A0A0',
+  unreadBadge: '#7C9EFF',
+  pinnedBackground: '#1E1E1E',
 };
 
 export const spacing = {
