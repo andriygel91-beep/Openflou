@@ -71,7 +71,15 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadSettings();
+    loadUserSession();
   }, []);
+
+  async function loadUserSession() {
+    const savedUser = await storage.getCurrentUser();
+    if (savedUser) {
+      setCurrentUser(savedUser);
+    }
+  }
 
   useEffect(() => {
     if (settings.autoTheme) {
@@ -109,6 +117,13 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   async function setTheme(newTheme: ThemeType) {
     setThemeState(newTheme);
     await updateSettings({ theme: newTheme });
+  }
+
+  async function setCurrentUserAndSave(user: User | null) {
+    setCurrentUser(user);
+    if (user) {
+      await storage.saveCurrentUser(user);
+    }
   }
 
   async function setLanguage(newLanguage: Language) {
@@ -232,7 +247,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         setTheme,
         setLanguage,
         currentUser,
-        setCurrentUser,
+        setCurrentUser: setCurrentUserAndSave,
         chats,
         loadChats,
         addChat,

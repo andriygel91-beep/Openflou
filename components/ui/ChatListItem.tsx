@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   name: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     flex: 1,
     includeFontPadding: false,
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   message: {
-    fontSize: 14,
+    fontSize: 15,
     flex: 1,
     includeFontPadding: false,
   },

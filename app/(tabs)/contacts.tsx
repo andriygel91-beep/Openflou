@@ -25,7 +25,6 @@ export default function ContactsTab() {
   const insets = useSafeAreaInsets();
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   useEffect(() => {
@@ -99,17 +98,12 @@ export default function ContactsTab() {
   }
 
   useEffect(() => {
-    handleSearch();
-  }, [searchQuery, contacts]);
-
-  async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
     }
 
-    setIsSearching(true);
-    try {
+    const searchUsers = async () => {
       const allUsers = await storage.getUsers();
       const query = searchQuery.toLowerCase();
       
@@ -143,12 +137,10 @@ export default function ContactsTab() {
       });
       
       setSearchResults(results);
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setIsSearching(false);
-    }
-  }
+    };
+
+    searchUsers();
+  }, [searchQuery, contacts]);
 
   const displayList = searchQuery.trim() ? searchResults : contacts.map((c) => ({ user: c, isContact: true }));
 
@@ -220,19 +212,6 @@ export default function ContactsTab() {
               {t.importFromContacts}
             </Text>
           </Pressable>
-          
-          <Pressable
-            onPress={() => router.push('/invite')}
-            style={({ pressed }) => [
-              styles.inviteButton,
-              {
-                backgroundColor: colors.surfaceSecondary,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <MaterialIcons name="person-add" size={20} color={colors.primary} />
-          </Pressable>
         </View>
         
         <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
@@ -245,7 +224,6 @@ export default function ContactsTab() {
             style={[styles.searchInput, { color: colors.text }]}
             autoCapitalize="none"
           />
-          {isSearching && <MaterialIcons name="hourglass-empty" size={20} color={colors.icon} />}
         </View>
       </View>
 
@@ -349,7 +327,6 @@ const styles = StyleSheet.create({
   },
   headerButtons: {
     flexDirection: 'row',
-    gap: 8,
     marginTop: 8,
     marginBottom: 12,
   },
@@ -367,13 +344,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
     includeFontPadding: false,
-  },
-  inviteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   searchContainer: {
     flexDirection: 'row',

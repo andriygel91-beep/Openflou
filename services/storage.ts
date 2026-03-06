@@ -4,6 +4,7 @@ import { User, Message, Chat, Contact, AppSettings, AuthState } from '@/types';
 
 const KEYS = {
   AUTH: '@openflou_auth',
+  CURRENT_USER: '@openflou_current_user',
   USERS: '@openflou_users',
   MESSAGES: '@openflou_messages',
   CHATS: '@openflou_chats',
@@ -23,6 +24,20 @@ export async function getAuthState(): Promise<AuthState | null> {
 
 export async function clearAuthState(): Promise<void> {
   await AsyncStorage.removeItem(KEYS.AUTH);
+}
+
+// Current User Session Storage
+export async function saveCurrentUser(user: User): Promise<void> {
+  await AsyncStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
+}
+
+export async function getCurrentUser(): Promise<User | null> {
+  const data = await AsyncStorage.getItem(KEYS.CURRENT_USER);
+  return data ? JSON.parse(data) : null;
+}
+
+export async function clearCurrentUser(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.CURRENT_USER);
 }
 
 // User Storage (P2P Network)
