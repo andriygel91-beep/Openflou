@@ -25,14 +25,18 @@ jobs:
 
       - name: 📦 Install Dependencies
         run: |
+          # Используем флаг для "плоской" структуры модулей (решает проблему с Babel)
+          pnpm config set shamefully-hoist true
           pnpm install --no-frozen-lockfile
-          pnpm add -D @react-native-community/cli @babel/runtime babel-plugin-module-resolver
+          # Добавляем именно то, на что ругается лог
+          pnpm add -D babel-preset-expo babel-plugin-module-resolver @react-native-community/cli
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NODE_ENV: production
         run: |
-          # 1. Babel Config
+          # 1. Babel Config (фиксируем алиас @/ и пресет)
           cat <<'EOF' > babel.config.js
           module.exports = function (api) {
             api.cache(true);
@@ -50,10 +54,10 @@ jobs:
           module.exports = config;
           EOF
 
-          # 3. Предсборка (здесь подтянутся имя и иконка из app.json)
+          # 3. Предсборка
           npx expo prebuild --platform android
 
-          # 4. Сборка бандла
+          # 4. Сборка бандла (теперь Babel всё найдет)
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
@@ -61,15 +65,14 @@ jobs:
             --assets-dest android/app/src/main/res \
             --reset-cache
 
-          # 5. ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ КОМАНДА (для RN 0.75+)
+          # 5. Финальная упаковка APK
           cd android
           chmod +x gradlew
-          # Мы убрали -x bundleReleaseJsAndAssets, так как команда теперь другая
           ./gradlew assembleRelease
-          
+
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Final-V33
+          name: OpenFlou-Success-V34
           path: android/app/build/outputs/apk/release/app-release.apk
           
