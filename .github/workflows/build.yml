@@ -12,13 +12,10 @@ jobs:
       - name: 🏗 Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Используем более стабильную 20-ю версию
+          node-version: 20
 
-      - name: 🏗 Install pnpm & CLI
-        run: |
-          npm install -g pnpm
-          # Устанавливаем недостающий CLI глобально, чтобы Expo не ругался
-          npm install -g @react-native-community/cli
+      - name: 🏗 Install pnpm
+        run: npm install -g pnpm
 
       - name: 🏗 Setup Java
         uses: actions/setup-java@v4
@@ -27,25 +24,27 @@ jobs:
           java-version: '17'
 
       - name: 📦 Install Dependencies
-        run: pnpm install
+        # Флаг --no-frozen-lockfile лечит ошибку со скриншота #34
+        run: pnpm install --no-frozen-lockfile
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Генерируем нативный код без лишних проверок
+          # Устанавливаем CLI, который требовал лог на скриншоте #41
+          pnpm add -D @react-native-community/cli
+          
+          # Генерация нативного кода
           npx expo prebuild --platform android --no-interactive
           
-          # 2. Создаем папку для бандла
+          # Создание папки и бандла (лечит белый экран)
           mkdir -p android/app/src/main/assets
-          
-          # 3. Собираем JS-бандл (Это решает проблему белого экрана)
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res
           
-          # 4. Финальная упаковка в APK
+          # Финальная сборка APK
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
