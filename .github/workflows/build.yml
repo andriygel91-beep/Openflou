@@ -30,20 +30,23 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Устанавливаем CLI внутри проекта
+          # Установка CLI
           pnpm add -D @react-native-community/cli
           
-          # Генерируем нативный код без лишних флагов
+          # Настройка нативного кода
           npx expo prebuild --platform android
           
-          # Создаем папку и бандл для победы над белым экраном
+          # Создаем директории для ассетов
           mkdir -p android/app/src/main/assets
+          
+          # Сборка бандла с ПРЯМЫМ указанием конфига (исправляет скриншот #13:22)
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
+            --assets-dest android/app/src/main/res \
+            --config metro.config.js
           
-          # Собираем APK
+          # Сборка финального APK
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
