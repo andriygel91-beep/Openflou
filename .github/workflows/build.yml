@@ -30,26 +30,21 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Принудительно создаем Metro Config, если его нет (лечит скрин #13:22)
-          echo "const { getDefaultConfig } = require('expo/metro-config'); const config = getDefaultConfig(__dirname); module.exports = config;" > metro.config.js
+          # Создаем Metro Config с поддержкой относительных путей
+          echo "const { getDefaultConfig } = require('expo/metro-config'); const config = getDefaultConfig(__dirname); config.resolver.nodeModulesPaths = [require('path').resolve(__dirname, 'node_modules')]; module.exports = config;" > metro.config.js
           
-          # 2. Установка CLI
           pnpm add -D @react-native-community/cli
-          
-          # 3. Настройка нативного кода
           npx expo prebuild --platform android
           
-          # 4. Создаем директории для бандла
           mkdir -p android/app/src/main/assets
           
-          # 5. Сборка JS-бандла (используем созданный конфиг)
+          # Сборка бандла (Добавили флаг для сброса кэша)
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
-            --config metro.config.js
+            --config metro.config.js --reset-cache
           
-          # 6. Финальная упаковка в APK
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
