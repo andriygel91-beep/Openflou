@@ -1,0 +1,33 @@
+name: Build APK
+on:
+  workflow_dispatch: # Это создаст кнопку запуска вручную
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 📦 Install Expo CLI
+        run: npm install -g expo-cli eas-cli
+
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      - name: 🚀 Build Android APK (Local)
+        run: |
+          npx eas-cli build --platform android --profile preview --local --non-interactive
+        # Эта команда создаст файл .apk прямо на сервере GitHub
+
+      - name: 📂 Upload APK Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-app-apk
+          path: "*.apk" # GitHub найдет созданный apk и сохранит его для скачивания
+          
