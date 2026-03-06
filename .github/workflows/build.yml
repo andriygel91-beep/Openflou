@@ -13,6 +13,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'pnpm'
 
       - name: 🏗 Setup pnpm
         uses: pnpm/action-setup@v2
@@ -32,18 +33,27 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Генерация нативного кода
+          # 1. Генерация нативных файлов Android
           npx expo prebuild --platform android --clean
+          
+          # 2. Создание папки для ассетов (защита от ошибок путей)
+          mkdir -p android/app/src/main/assets
+          
+          # 3. Ручная сборка JS-бандла (Решает проблему белого экрана)
+          # Используем входную точку Expo Router
+          npx react-native bundle --platform android --dev false \
+            --entry-file node_modules/expo-router/entry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+          
+          # 4. Финальная компиляция APK
           cd android
-          # Полная очистка перед сборкой
           ./gradlew clean
-          # Сборка финального APK
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
           name: OpenFlou-Messenger-Release
-          # Указываем путь только к готовому файлу
           path: android/app/build/outputs/apk/release/app-release.apk
           
