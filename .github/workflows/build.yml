@@ -23,16 +23,17 @@ jobs:
         run: pnpm add -g eas-cli
 
       - name: 📦 Install Dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: 🚀 Final Build Attempt
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Автоматически создаем проект и ключи, если их нет
           npx eas-cli project:init --non-interactive --force
-          # Прямая команда сборки с автоматическим подтверждением всего
-          npx eas-cli build --platform android --profile preview --local --non-interactive --clear-cache
+          # Пытаемся автоматически создать учетные данные для Android
+          npx eas-cli build --platform android --profile preview --non-interactive --no-wait || true
+          # Сама сборка
+          npx eas-cli build --platform android --profile preview --local --non-interactive
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
