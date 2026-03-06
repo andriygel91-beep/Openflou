@@ -30,39 +30,33 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Создаем Metro Config, который ПРИНУДИТЕЛЬНО понимает пути @/
-          # Это лечит ошибку со скриншота №16:17
-          cat <<'EOF' > metro.config.js
-          const { getDefaultConfig } = require('expo/metro-config');
-          const path = require('path');
-          const config = getDefaultConfig(__dirname);
-          config.resolver.alias = {
-            '@': path.resolve(__dirname),
-          };
-          module.exports = config;
-          EOF
+          # 1. Исправляем пути @/ прямо в файлах перед сборкой (самый надежный метод)
+          # Это заменит все '@/hooks/' на '../hooks/' и т.д.
+          find app -type f -name "*.tsx" -print0 | xargs -0 sed -i "s|@/hooks/|../hooks/|g"
+          find app -type f -name "*.tsx" -print0 | xargs -0 sed -i "s|@/services/|../services/|g"
+          find app -type f -name "*.tsx" -print0 | xargs -0 sed -i "s|@/components/|../components/|g"
 
-          # 2. Установка необходимых инструментов
+          # 2. Установка CLI
           pnpm add -D @react-native-community/cli
           
-          # 3. Подготовка нативного кода
-          npx expo prebuild --platform android --no-interactive
+          # 3. Генерация нативного кода
+          npx expo prebuild --platform android
           
-          # 4. Сборка бандла (критически важно для работы без белого экрана)
+          # 4. Сборка бандла
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
-            --config metro.config.js --reset-cache
+            --reset-cache
 
-          # 5. Финальная компиляция
+          # 5. Финальная упаковка
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Messenger-V25
+          name: OpenFlou-Messenger-V26
           path: android/app/build/outputs/apk/release/app-release.apk
           
