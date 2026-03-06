@@ -53,7 +53,7 @@ export default function SplashScreen() {
     // 1. Spiral expands and rotates
     spiralRotation.value = withTiming(720, {
       duration: 1200,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      easing: Easing.out(Easing.cubic),
     });
     
     spiralScale.value = withTiming(1, {

@@ -12,6 +12,24 @@ import { StatusBar } from 'expo-status-bar';
 
 export default function SettingsTab() {
   const { colors, t, theme, setTheme, language, setLanguage, currentUser, setCurrentUser, settings, updateSettings } = useOpenFlou();
+  
+  const languageNames: Record<string, string> = {
+    en: 'English',
+    ru: 'Русский',
+    uk: 'Українська',
+    es: 'Español',
+    fr: 'Français',
+    de: 'Deutsch',
+    it: 'Italiano',
+    pt: 'Português',
+    pl: 'Polski',
+    tr: 'Türkçe',
+    ar: 'العربية',
+    zh: '中文',
+    ja: '日本語',
+    ko: '한국어',
+    hi: 'हिन्दी',
+  };
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -119,12 +137,12 @@ export default function SettingsTab() {
           <SettingItem
             icon="language"
             title={t.language}
-            value={language === 'en' ? 'English' : language === 'ru' ? 'Русский' : 'Українська'}
+            value={languageNames[language] || 'English'}
             onPress={() => {
-              const langs: Array<'en' | 'ru' | 'uk'> = ['en', 'ru', 'uk'];
+              const langs = ['en', 'ru', 'uk', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'tr', 'ar', 'zh', 'ja', 'ko', 'hi'] as const;
               const currentIndex = langs.indexOf(language);
               const nextLang = langs[(currentIndex + 1) % langs.length];
-              setLanguage(nextLang);
+              setLanguage(nextLang as any);
             }}
           />
           

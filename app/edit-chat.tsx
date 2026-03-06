@@ -1,6 +1,8 @@
 // Openflou Edit Chat Screen (Groups & Channels)
 import React, { useState, useEffect } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, FlatList } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
@@ -21,6 +23,7 @@ export default function EditChatScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [avatar, setAvatar] = useState<string | undefined>();
 
   useEffect(() => {
     loadChat();
@@ -37,6 +40,7 @@ export default function EditChatScreen() {
       setChat(foundChat);
       setName(foundChat.name || '');
       setDescription(foundChat.description || '');
+      setAvatar(foundChat.avatar);
       setSelectedMembers(foundChat.participants.filter((p) => p !== currentUser?.id));
     }
   }
@@ -59,6 +63,7 @@ export default function EditChatScreen() {
       ...chat,
       name: name.trim(),
       description: description.trim() || undefined,
+      avatar,
       participants: [currentUser.id, ...selectedMembers],
     };
 
@@ -106,9 +111,37 @@ export default function EditChatScreen() {
       <ScrollView>
         {/* Icon & Name */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <View style={[styles.icon, { backgroundColor: colors.surfaceSecondary }]}>
-            <MaterialIcons name={isChannel ? 'campaign' : 'group'} size={32} color={colors.icon} />
-          </View>
+          <Pressable
+            onPress={async () => {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                showAlert('Permission denied');
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets[0]) {
+                setAvatar(result.assets[0].uri);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.icon,
+              {
+                backgroundColor: colors.surfaceSecondary,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.iconImage} />
+            ) : (
+              <MaterialIcons name={isChannel ? 'campaign' : 'group'} size={32} color={colors.icon} />
+            )}
+          </Pressable>
           <View style={styles.inputContainer}>
             <TextInput
               value={name}
@@ -241,6 +274,12 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  iconImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   inputContainer: {
     flex: 1,

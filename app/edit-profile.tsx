@@ -1,5 +1,6 @@
 // Openflou Edit Profile Screen
 import React, { useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,7 @@ export default function EditProfileScreen() {
 
   const [username, setUsername] = useState(currentUser?.username || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
+  const [avatar, setAvatar] = useState(currentUser?.avatar);
 
   async function handleSave() {
     if (!username.trim()) {
@@ -43,6 +45,7 @@ export default function EditProfileScreen() {
       ...currentUser,
       username: username.trim(),
       bio: bio.trim() || undefined,
+      avatar,
     };
 
     await storage.saveUser(updatedUser);
@@ -78,8 +81,24 @@ export default function EditProfileScreen() {
       <ScrollView>
         {/* Avatar Section */}
         <View style={[styles.avatarSection, { backgroundColor: colors.surface }]}>
-          <Avatar uri={currentUser?.avatar} username={username || currentUser?.username} size={80} colors={colors} />
+          <Avatar uri={avatar} username={username || currentUser?.username} size={80} colors={colors} />
           <Pressable
+            onPress={async () => {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                showAlert('Permission denied');
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets[0]) {
+                setAvatar(result.assets[0].uri);
+              }
+            }}
             style={({ pressed }) => [
               styles.changePhotoButton,
               {

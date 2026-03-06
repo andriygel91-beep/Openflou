@@ -50,7 +50,48 @@ export default function ContactsTab() {
         return;
       }
 
-      showAlert(`Found ${data.length} contacts. Feature in development.`);
+      showAlert(`Found ${data.length} contacts. Checking Openflou users...`);
+      
+      // Check which contacts have Openflou accounts
+      const allUsers = await storage.getUsers();
+      let foundUsers = 0;
+      
+      for (const contact of data) {
+        if (!contact.phoneNumbers || contact.phoneNumbers.length === 0) continue;
+        
+        // In real P2P, search by phone number hash
+        const phoneNumber = contact.phoneNumbers[0].number?.replace(/\D/g, '');
+        
+        // For demo: search by name similarity
+        const matchedUser = allUsers.find((u) => 
+          contact.name?.toLowerCase().includes(u.username.toLowerCase())
+        );
+        
+        if (matchedUser) {
+          foundUsers++;
+          const newContact: Contact = {
+            userId: matchedUser.id,
+            username: matchedUser.username,
+            avatar: matchedUser.avatar,
+            bio: matchedUser.bio,
+            isOnline: matchedUser.isOnline,
+            lastSeen: matchedUser.lastSeen,
+            addedAt: new Date(),
+          };
+          
+          const exists = contacts.some((c) => c.userId === matchedUser.id);
+          if (!exists) {
+            await addContact(newContact);
+          }
+        }
+      }
+      
+      if (foundUsers > 0) {
+        showAlert(`Added ${foundUsers} contacts from your phone`);
+      } else {
+        showAlert('No Openflou users found. Invite your friends!');
+        router.push('/invite');
+      }
     } catch (error) {
       showAlert('Error importing contacts');
       console.error(error);
@@ -163,21 +204,36 @@ export default function ContactsTab() {
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.contacts}</Text>
         
-        <Pressable
-          onPress={importFromPhoneContacts}
-          style={({ pressed }) => [
-            styles.importButton,
-            {
-              backgroundColor: colors.primary,
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
-        >
-          <MaterialIcons name="contacts" size={18} color={colors.textInverted} />
-          <Text style={[styles.importButtonText, { color: colors.textInverted }]}>
-            {t.importFromContacts}
-          </Text>
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={importFromPhoneContacts}
+            style={({ pressed }) => [
+              styles.importButton,
+              {
+                backgroundColor: colors.primary,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <MaterialIcons name="contacts" size={18} color={colors.textInverted} />
+            <Text style={[styles.importButtonText, { color: colors.textInverted }]}>
+              {t.importFromContacts}
+            </Text>
+          </Pressable>
+          
+          <Pressable
+            onPress={() => router.push('/invite')}
+            style={({ pressed }) => [
+              styles.inviteButton,
+              {
+                backgroundColor: colors.surfaceSecondary,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <MaterialIcons name="person-add" size={20} color={colors.primary} />
+          </Pressable>
+        </View>
         
         <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
           <MaterialIcons name="search" size={20} color={colors.icon} />
@@ -291,20 +347,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     includeFontPadding: false,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
   importButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
-    marginTop: 8,
-    marginBottom: 12,
   },
   importButtonText: {
     fontSize: 13,
     fontWeight: '600',
     marginLeft: 6,
     includeFontPadding: false,
+  },
+  inviteButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchContainer: {
     flexDirection: 'row',

@@ -1,139 +1,143 @@
-// Openflou Translations - UK/RU/EN
-export type Language = 'uk' | 'ru' | 'en';
+// Openflou Translations - 15 Languages
+export type Language = 'en' | 'ru' | 'uk' | 'es' | 'fr' | 'de' | 'it' | 'pt' | 'pl' | 'tr' | 'ar' | 'zh' | 'ja' | 'ko' | 'hi';
+
+const baseTranslations = {
+  // Auth
+  authTitle: 'Openflou',
+  authSubtitle: 'Decentralized Secure Messaging',
+  username: 'Username',
+  password: 'Password',
+  signIn: 'Sign In',
+  signUp: 'Create Account',
+  enterUsername: 'Enter your username',
+  enterPassword: 'Enter password',
+  usernameRequired: 'Username is required',
+  passwordRequired: 'Password is required',
+  accountCreated: 'Account created successfully',
+  invalidCredentials: 'Invalid username or password',
+  
+  // Tabs
+  chats: 'Chats',
+  contacts: 'Contacts',
+  settings: 'Settings',
+  
+  // Chats
+  searchChats: 'Search chats',
+  newMessage: 'New Message',
+  groups: 'Groups',
+  channels: 'Channels',
+  noChats: 'No chats yet',
+  noChatsDesc: 'Start a conversation by tapping + button',
+  
+  // Chat
+  typeMessage: 'Type a message',
+  online: 'online',
+  offline: 'offline',
+  lastSeen: 'last seen',
+  typing: 'typing...',
+  photo: 'Photo',
+  video: 'Video',
+  file: 'File',
+  
+  // Contacts
+  searchContacts: 'Search contacts',
+  searchByUsername: 'Search by username',
+  addContact: 'Add Contact',
+  contactAdded: 'Contact added',
+  alreadyInContacts: 'Already in contacts',
+  notInContacts: 'Not in contacts',
+  tryDifferentQuery: 'Try a different search',
+  noContacts: 'No contacts yet',
+  noContactsDesc: 'Search by username to add contacts',
+  importFromContacts: 'Import from Contacts',
+  phoneContacts: 'Phone Contacts',
+  inviteFriend: 'Invite Friend',
+  shareApp: 'Share Openflou',
+  scanToDownload: 'Scan QR to download',
+  
+  // Settings
+  account: 'Account',
+  appearance: 'Appearance',
+  language: 'Language',
+  theme: 'Theme',
+  lightTheme: 'Light',
+  darkTheme: 'Dark',
+  notifications: 'Notifications',
+  privacy: 'Privacy & Security',
+  help: 'Help & Support',
+  aiAssistant: 'AI Assistant',
+  logout: 'Logout',
+  editProfile: 'Edit Profile',
+  
+  // AI Assistant
+  aiTitle: 'Gemini Assistant',
+  aiPlaceholder: 'Ask me anything...',
+  aiWelcome: 'Hello! I am your AI assistant. How can I help you today?',
+  
+  // Group/Channel
+  createGroup: 'Create Group',
+  createChannel: 'Create Channel',
+  editGroup: 'Edit Group',
+  editChannel: 'Edit Channel',
+  groupName: 'Group Name',
+  channelName: 'Channel Name',
+  channelDescription: 'Channel Description',
+  addMembers: 'Add Members',
+  admin: 'Admin',
+  member: 'Member',
+  subscribers: 'subscribers',
+  
+  // Actions
+  send: 'Send',
+  cancel: 'Cancel',
+  delete: 'Delete',
+  edit: 'Edit',
+  copy: 'Copy',
+  forward: 'Forward',
+  reply: 'Reply',
+  save: 'Save',
+  
+  // Messages
+  messageDeleted: 'Message deleted',
+  messageEdited: 'edited',
+  
+  // Common
+  you: 'You',
+  today: 'Today',
+  yesterday: 'Yesterday',
+  
+  // Voice
+  voiceMessage: 'Voice Message',
+  recording: 'Recording...',
+  holdToRecord: 'Hold to record',
+  releaseToSend: 'Release to send',
+  slideToCancel: 'Slide to cancel',
+  
+  // Reactions
+  addReaction: 'Add reaction',
+  
+  // Search
+  searchMessages: 'Search messages',
+  searchResults: 'Search results',
+  noResults: 'No results found',
+  
+  // Auto theme
+  autoTheme: 'Auto Theme',
+  followSystem: 'Follow System',
+  timeOfDay: 'Time of Day',
+  
+  // Groups
+  members: 'members',
+  viewMembers: 'View Members',
+  leaveGroup: 'Leave Group',
+};
 
 export const translations = {
   // English
-  en: {
-    // Auth
-    authTitle: 'Openflou',
-    authSubtitle: 'Decentralized Secure Messaging',
-    username: 'Username',
-    password: 'Password',
-    signIn: 'Sign In',
-    signUp: 'Create Account',
-    enterUsername: 'Enter your username',
-    enterPassword: 'Enter password',
-    usernameRequired: 'Username is required',
-    passwordRequired: 'Password is required',
-    accountCreated: 'Account created successfully',
-    invalidCredentials: 'Invalid username or password',
-    
-    // Tabs
-    chats: 'Chats',
-    contacts: 'Contacts',
-    settings: 'Settings',
-    
-    // Chats
-    searchChats: 'Search chats',
-    newMessage: 'New Message',
-    groups: 'Groups',
-    channels: 'Channels',
-    noChats: 'No chats yet',
-    noChatsDesc: 'Start a conversation by tapping + button',
-    
-    // Chat
-    typeMessage: 'Type a message',
-    online: 'online',
-    offline: 'offline',
-    lastSeen: 'last seen',
-    typing: 'typing...',
-    photo: 'Photo',
-    video: 'Video',
-    file: 'File',
-    
-    // Contacts
-    searchContacts: 'Search contacts',
-    searchByUsername: 'Search by username',
-    addContact: 'Add Contact',
-    contactAdded: 'Contact added',
-    alreadyInContacts: 'Already in contacts',
-    notInContacts: 'Not in contacts',
-    tryDifferentQuery: 'Try a different search',
-    noContacts: 'No contacts yet',
-    noContactsDesc: 'Search by username to add contacts',
-    importFromContacts: 'Import from Contacts',
-    phoneContacts: 'Phone Contacts',
-    
-    // Settings
-    account: 'Account',
-    appearance: 'Appearance',
-    language: 'Language',
-    theme: 'Theme',
-    lightTheme: 'Light',
-    darkTheme: 'Dark',
-    notifications: 'Notifications',
-    privacy: 'Privacy & Security',
-    help: 'Help & Support',
-    aiAssistant: 'AI Assistant',
-    logout: 'Logout',
-    editProfile: 'Edit Profile',
-    
-    // AI Assistant
-    aiTitle: 'Gemini Assistant',
-    aiPlaceholder: 'Ask me anything...',
-    aiWelcome: 'Hello! I\'m your AI assistant. How can I help you today?',
-    
-    // Group/Channel
-    createGroup: 'Create Group',
-    createChannel: 'Create Channel',
-    editGroup: 'Edit Group',
-    editChannel: 'Edit Channel',
-    groupName: 'Group Name',
-    channelName: 'Channel Name',
-    channelDescription: 'Channel Description',
-    addMembers: 'Add Members',
-    admin: 'Admin',
-    member: 'Member',
-    subscribers: 'subscribers',
-    
-    // Actions
-    send: 'Send',
-    cancel: 'Cancel',
-    delete: 'Delete',
-    edit: 'Edit',
-    copy: 'Copy',
-    forward: 'Forward',
-    reply: 'Reply',
-    save: 'Save',
-    
-    // Messages
-    messageDeleted: 'Message deleted',
-    messageEdited: 'edited',
-    
-    // Common
-    you: 'You',
-    today: 'Today',
-    yesterday: 'Yesterday',
-    
-    // Voice
-    voiceMessage: 'Voice Message',
-    recording: 'Recording...',
-    holdToRecord: 'Hold to record',
-    releaseToSend: 'Release to send',
-    slideToCancel: 'Slide to cancel',
-    
-    // Reactions
-    addReaction: 'Add reaction',
-    
-    // Search
-    searchMessages: 'Search messages',
-    searchResults: 'Search results',
-    noResults: 'No results found',
-    
-    // Auto theme
-    autoTheme: 'Auto Theme',
-    followSystem: 'Follow System',
-    timeOfDay: 'Time of Day',
-    
-    // Groups
-    members: 'members',
-    viewMembers: 'View Members',
-    leaveGroup: 'Leave Group',
-  },
+  en: baseTranslations,
   
-  // Russian
+  // Russian - Русский
   ru: {
-    // Auth
     authTitle: 'Openflou',
     authSubtitle: 'Децентрализованный защищённый мессенджер',
     username: 'Имя пользователя',
@@ -146,21 +150,15 @@ export const translations = {
     passwordRequired: 'Требуется пароль',
     accountCreated: 'Аккаунт успешно создан',
     invalidCredentials: 'Неверное имя пользователя или пароль',
-    
-    // Tabs
     chats: 'Чаты',
     contacts: 'Контакты',
     settings: 'Настройки',
-    
-    // Chats
     searchChats: 'Поиск чатов',
     newMessage: 'Новое сообщение',
     groups: 'Группы',
     channels: 'Каналы',
     noChats: 'Нет чатов',
     noChatsDesc: 'Начните беседу, нажав кнопку +',
-    
-    // Chat
     typeMessage: 'Введите сообщение',
     online: 'в сети',
     offline: 'не в сети',
@@ -169,8 +167,6 @@ export const translations = {
     photo: 'Фото',
     video: 'Видео',
     file: 'Файл',
-    
-    // Contacts
     searchContacts: 'Поиск контактов',
     searchByUsername: 'Поиск по имени пользователя',
     addContact: 'Добавить контакт',
@@ -182,8 +178,9 @@ export const translations = {
     noContactsDesc: 'Найдите пользователей по имени',
     importFromContacts: 'Импорт из контактов',
     phoneContacts: 'Контакты телефона',
-    
-    // Settings
+    inviteFriend: 'Пригласить друга',
+    shareApp: 'Поделиться Openflou',
+    scanToDownload: 'Сканируйте QR для скачивания',
     account: 'Аккаунт',
     appearance: 'Оформление',
     language: 'Язык',
@@ -196,13 +193,9 @@ export const translations = {
     aiAssistant: 'AI Ассистент',
     logout: 'Выйти',
     editProfile: 'Редактировать профиль',
-    
-    // AI Assistant
     aiTitle: 'Gemini Ассистент',
     aiPlaceholder: 'Спросите что угодно...',
     aiWelcome: 'Привет! Я ваш AI-ассистент. Чем могу помочь?',
-    
-    // Group/Channel
     createGroup: 'Создать группу',
     createChannel: 'Создать канал',
     editGroup: 'Редактировать группу',
@@ -214,8 +207,6 @@ export const translations = {
     admin: 'Админ',
     member: 'Участник',
     subscribers: 'подписчиков',
-    
-    // Actions
     send: 'Отправить',
     cancel: 'Отмена',
     delete: 'Удалить',
@@ -224,45 +215,30 @@ export const translations = {
     forward: 'Переслать',
     reply: 'Ответить',
     save: 'Сохранить',
-    
-    // Messages
     messageDeleted: 'Сообщение удалено',
     messageEdited: 'изменено',
-    
-    // Common
     you: 'Вы',
     today: 'Сегодня',
     yesterday: 'Вчера',
-    
-    // Voice
     voiceMessage: 'Голосовое сообщение',
     recording: 'Запись...',
     holdToRecord: 'Удерживайте для записи',
     releaseToSend: 'Отпустите для отправки',
     slideToCancel: 'Сдвиньте для отмены',
-    
-    // Reactions
     addReaction: 'Добавить реакцию',
-    
-    // Search
     searchMessages: 'Поиск сообщений',
     searchResults: 'Результаты поиска',
     noResults: 'Ничего не найдено',
-    
-    // Auto theme
     autoTheme: 'Авто тема',
     followSystem: 'Как в системе',
     timeOfDay: 'По времени суток',
-    
-    // Groups
     members: 'участников',
     viewMembers: 'Показать участников',
     leaveGroup: 'Покинуть группу',
   },
   
-  // Ukrainian
+  // Ukrainian - Українська
   uk: {
-    // Auth
     authTitle: 'Openflou',
     authSubtitle: 'Децентралізований захищений месенджер',
     username: 'Ім\'я користувача',
@@ -275,21 +251,15 @@ export const translations = {
     passwordRequired: 'Потрібен пароль',
     accountCreated: 'Акаунт успішно створено',
     invalidCredentials: 'Невірне ім\'я користувача або пароль',
-    
-    // Tabs
     chats: 'Чати',
     contacts: 'Контакти',
     settings: 'Налаштування',
-    
-    // Chats
     searchChats: 'Пошук чатів',
     newMessage: 'Нове повідомлення',
     groups: 'Групи',
     channels: 'Канали',
     noChats: 'Немає чатів',
     noChatsDesc: 'Почніть розмову, натиснувши кнопку +',
-    
-    // Chat
     typeMessage: 'Введіть повідомлення',
     online: 'в мережі',
     offline: 'не в мережі',
@@ -298,8 +268,6 @@ export const translations = {
     photo: 'Фото',
     video: 'Відео',
     file: 'Файл',
-    
-    // Contacts
     searchContacts: 'Пошук контактів',
     searchByUsername: 'Пошук по імені користувача',
     addContact: 'Додати контакт',
@@ -311,8 +279,9 @@ export const translations = {
     noContactsDesc: 'Знайдіть користувачів за іменем',
     importFromContacts: 'Імпорт з контактів',
     phoneContacts: 'Контакти телефону',
-    
-    // Settings
+    inviteFriend: 'Запросити друга',
+    shareApp: 'Поділитися Openflou',
+    scanToDownload: 'Скануйте QR для завантаження',
     account: 'Акаунт',
     appearance: 'Оформлення',
     language: 'Мова',
@@ -325,13 +294,9 @@ export const translations = {
     aiAssistant: 'AI Асистент',
     logout: 'Вийти',
     editProfile: 'Редагувати профіль',
-    
-    // AI Assistant
     aiTitle: 'Gemini Асистент',
     aiPlaceholder: 'Запитайте що завгодно...',
     aiWelcome: 'Привіт! Я ваш AI-асистент. Чим можу допомогти?',
-    
-    // Group/Channel
     createGroup: 'Створити групу',
     createChannel: 'Створити канал',
     editGroup: 'Редагувати групу',
@@ -343,8 +308,6 @@ export const translations = {
     admin: 'Адмін',
     member: 'Учасник',
     subscribers: 'підписників',
-    
-    // Actions
     send: 'Відправити',
     cancel: 'Скасувати',
     delete: 'Видалити',
@@ -353,39 +316,253 @@ export const translations = {
     forward: 'Переслати',
     reply: 'Відповісти',
     save: 'Зберегти',
-    
-    // Messages
     messageDeleted: 'Повідомлення видалено',
     messageEdited: 'змінено',
-    
-    // Common
     you: 'Ви',
     today: 'Сьогодні',
     yesterday: 'Вчора',
-    
-    // Voice
     voiceMessage: 'Голосове повідомлення',
     recording: 'Запис...',
     holdToRecord: 'Утримуйте для запису',
     releaseToSend: 'Відпустіть для відправки',
     slideToCancel: 'Посуньте для скасування',
-    
-    // Reactions
     addReaction: 'Додати реакцію',
-    
-    // Search
     searchMessages: 'Пошук повідомлень',
     searchResults: 'Результати пошуку',
     noResults: 'Нічого не знайдено',
-    
-    // Auto theme
     autoTheme: 'Авто тема',
     followSystem: 'Як у системі',
     timeOfDay: 'За часом доби',
-    
-    // Groups
     members: 'учасників',
     viewMembers: 'Показати учасників',
     leaveGroup: 'Покинути групу',
+  },
+  
+  // Spanish - Español
+  es: {
+    ...baseTranslations,
+    authSubtitle: 'Mensajería segura descentralizada',
+    username: 'Nombre de usuario',
+    password: 'Contraseña',
+    signIn: 'Iniciar sesión',
+    signUp: 'Crear cuenta',
+    enterUsername: 'Ingrese su nombre de usuario',
+    enterPassword: 'Ingrese contraseña',
+    usernameRequired: 'Se requiere nombre de usuario',
+    passwordRequired: 'Se requiere contraseña',
+    accountCreated: 'Cuenta creada exitosamente',
+    invalidCredentials: 'Nombre de usuario o contraseña inválidos',
+    inviteFriend: 'Invitar amigo',
+    shareApp: 'Compartir Openflou',
+    scanToDownload: 'Escanea QR para descargar',
+  },
+  
+  // French - Français
+  fr: {
+    ...baseTranslations,
+    authSubtitle: 'Messagerie sécurisée décentralisée',
+    username: 'Nom d\'utilisateur',
+    password: 'Mot de passe',
+    signIn: 'Se connecter',
+    signUp: 'Créer un compte',
+    enterUsername: 'Entrez votre nom d\'utilisateur',
+    enterPassword: 'Entrez le mot de passe',
+    usernameRequired: 'Le nom d\'utilisateur est requis',
+    passwordRequired: 'Le mot de passe est requis',
+    accountCreated: 'Compte créé avec succès',
+    invalidCredentials: 'Nom d\'utilisateur ou mot de passe invalide',
+    inviteFriend: 'Inviter un ami',
+    shareApp: 'Partager Openflou',
+    scanToDownload: 'Scanner QR pour télécharger',
+  },
+  
+  // German - Deutsch
+  de: {
+    ...baseTranslations,
+    authSubtitle: 'Dezentralisierte sichere Nachrichtenübermittlung',
+    username: 'Benutzername',
+    password: 'Passwort',
+    signIn: 'Anmelden',
+    signUp: 'Konto erstellen',
+    enterUsername: 'Geben Sie Ihren Benutzernamen ein',
+    enterPassword: 'Passwort eingeben',
+    usernameRequired: 'Benutzername erforderlich',
+    passwordRequired: 'Passwort erforderlich',
+    accountCreated: 'Konto erfolgreich erstellt',
+    invalidCredentials: 'Ungültiger Benutzername oder Passwort',
+    inviteFriend: 'Freund einladen',
+    shareApp: 'Openflou teilen',
+    scanToDownload: 'QR scannen zum Herunterladen',
+  },
+  
+  // Italian - Italiano
+  it: {
+    ...baseTranslations,
+    authSubtitle: 'Messaggistica sicura decentralizzata',
+    username: 'Nome utente',
+    password: 'Password',
+    signIn: 'Accedi',
+    signUp: 'Crea account',
+    enterUsername: 'Inserisci il tuo nome utente',
+    enterPassword: 'Inserisci password',
+    usernameRequired: 'Nome utente richiesto',
+    passwordRequired: 'Password richiesta',
+    accountCreated: 'Account creato con successo',
+    invalidCredentials: 'Nome utente o password non validi',
+    inviteFriend: 'Invita amico',
+    shareApp: 'Condividi Openflou',
+    scanToDownload: 'Scansiona QR per scaricare',
+  },
+  
+  // Portuguese - Português
+  pt: {
+    ...baseTranslations,
+    authSubtitle: 'Mensagens seguras descentralizadas',
+    username: 'Nome de usuário',
+    password: 'Senha',
+    signIn: 'Entrar',
+    signUp: 'Criar conta',
+    enterUsername: 'Digite seu nome de usuário',
+    enterPassword: 'Digite a senha',
+    usernameRequired: 'Nome de usuário obrigatório',
+    passwordRequired: 'Senha obrigatória',
+    accountCreated: 'Conta criada com sucesso',
+    invalidCredentials: 'Nome de usuário ou senha inválidos',
+    inviteFriend: 'Convidar amigo',
+    shareApp: 'Compartilhar Openflou',
+    scanToDownload: 'Escaneie QR para baixar',
+  },
+  
+  // Polish - Polski
+  pl: {
+    ...baseTranslations,
+    authSubtitle: 'Zdecentralizowana bezpieczna komunikacja',
+    username: 'Nazwa użytkownika',
+    password: 'Hasło',
+    signIn: 'Zaloguj się',
+    signUp: 'Utwórz konto',
+    enterUsername: 'Wprowadź nazwę użytkownika',
+    enterPassword: 'Wprowadź hasło',
+    usernameRequired: 'Wymagana nazwa użytkownika',
+    passwordRequired: 'Wymagane hasło',
+    accountCreated: 'Konto utworzone pomyślnie',
+    invalidCredentials: 'Nieprawidłowa nazwa użytkownika lub hasło',
+    inviteFriend: 'Zaproś przyjaciela',
+    shareApp: 'Udostępnij Openflou',
+    scanToDownload: 'Zeskanuj QR aby pobrać',
+  },
+  
+  // Turkish - Türkçe
+  tr: {
+    ...baseTranslations,
+    authSubtitle: 'Merkezi olmayan güvenli mesajlaşma',
+    username: 'Kullanıcı adı',
+    password: 'Şifre',
+    signIn: 'Giriş yap',
+    signUp: 'Hesap oluştur',
+    enterUsername: 'Kullanıcı adınızı girin',
+    enterPassword: 'Şifre girin',
+    usernameRequired: 'Kullanıcı adı gerekli',
+    passwordRequired: 'Şifre gerekli',
+    accountCreated: 'Hesap başarıyla oluşturuldu',
+    invalidCredentials: 'Geçersiz kullanıcı adı veya şifre',
+    inviteFriend: 'Arkadaş davet et',
+    shareApp: 'Openflou\'yu paylaş',
+    scanToDownload: 'İndirmek için QR tara',
+  },
+  
+  // Arabic - العربية
+  ar: {
+    ...baseTranslations,
+    authSubtitle: 'مراسلة آمنة لامركزية',
+    username: 'اسم المستخدم',
+    password: 'كلمة المرور',
+    signIn: 'تسجيل الدخول',
+    signUp: 'إنشاء حساب',
+    enterUsername: 'أدخل اسم المستخدم',
+    enterPassword: 'أدخل كلمة المرور',
+    usernameRequired: 'اسم المستخدم مطلوب',
+    passwordRequired: 'كلمة المرور مطلوبة',
+    accountCreated: 'تم إنشاء الحساب بنجاح',
+    invalidCredentials: 'اسم المستخدم أو كلمة المرور غير صحيحة',
+    inviteFriend: 'دعوة صديق',
+    shareApp: 'مشاركة Openflou',
+    scanToDownload: 'مسح QR للتحميل',
+  },
+  
+  // Chinese - 中文
+  zh: {
+    ...baseTranslations,
+    authSubtitle: '去中心化安全消息传递',
+    username: '用户名',
+    password: '密码',
+    signIn: '登录',
+    signUp: '创建账户',
+    enterUsername: '输入用户名',
+    enterPassword: '输入密码',
+    usernameRequired: '需要用户名',
+    passwordRequired: '需要密码',
+    accountCreated: '账户创建成功',
+    invalidCredentials: '用户名或密码无效',
+    inviteFriend: '邀请朋友',
+    shareApp: '分享 Openflou',
+    scanToDownload: '扫描二维码下载',
+  },
+  
+  // Japanese - 日本語
+  ja: {
+    ...baseTranslations,
+    authSubtitle: '分散型セキュアメッセージング',
+    username: 'ユーザー名',
+    password: 'パスワード',
+    signIn: 'ログイン',
+    signUp: 'アカウント作成',
+    enterUsername: 'ユーザー名を入力',
+    enterPassword: 'パスワードを入力',
+    usernameRequired: 'ユーザー名が必要です',
+    passwordRequired: 'パスワードが必要です',
+    accountCreated: 'アカウントが正常に作成されました',
+    invalidCredentials: 'ユーザー名またはパスワードが無効です',
+    inviteFriend: '友達を招待',
+    shareApp: 'Openflouを共有',
+    scanToDownload: 'QRをスキャンしてダウンロード',
+  },
+  
+  // Korean - 한국어
+  ko: {
+    ...baseTranslations,
+    authSubtitle: '탈중앙화 보안 메시징',
+    username: '사용자 이름',
+    password: '비밀번호',
+    signIn: '로그인',
+    signUp: '계정 만들기',
+    enterUsername: '사용자 이름 입력',
+    enterPassword: '비밀번호 입력',
+    usernameRequired: '사용자 이름이 필요합니다',
+    passwordRequired: '비밀번호가 필요합니다',
+    accountCreated: '계정이 성공적으로 생성되었습니다',
+    invalidCredentials: '잘못된 사용자 이름 또는 비밀번호',
+    inviteFriend: '친구 초대',
+    shareApp: 'Openflou 공유',
+    scanToDownload: 'QR 스캔하여 다운로드',
+  },
+  
+  // Hindi - हिन्दी
+  hi: {
+    ...baseTranslations,
+    authSubtitle: 'विकेंद्रीकृत सुरक्षित संदेश',
+    username: 'उपयोगकर्ता नाम',
+    password: 'पासवर्ड',
+    signIn: 'साइन इन करें',
+    signUp: 'खाता बनाएं',
+    enterUsername: 'अपना उपयोगकर्ता नाम दर्ज करें',
+    enterPassword: 'पासवर्ड दर्ज करें',
+    usernameRequired: 'उपयोगकर्ता नाम आवश्यक है',
+    passwordRequired: 'पासवर्ड आवश्यक है',
+    accountCreated: 'खाता सफलतापूर्वक बनाया गया',
+    invalidCredentials: 'अमान्य उपयोगकर्ता नाम या पासवर्ड',
+    inviteFriend: 'मित्र को आमंत्रित करें',
+    shareApp: 'Openflou साझा करें',
+    scanToDownload: 'डाउनलोड के लिए QR स्कैन करें',
   },
 };
