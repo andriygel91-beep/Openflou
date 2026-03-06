@@ -1,6 +1,7 @@
 // Openflou Reaction Picker Component
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 
 interface ReactionPickerProps {
@@ -18,36 +19,46 @@ export function ReactionPicker({ visible, colors, onSelect, onClose, theme }: Re
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <BlurView
-          intensity={20}
-          tint={theme}
-          style={styles.blurContainer}
-        >
-          <View style={[styles.pickerContainer, { backgroundColor: colors.surface }]}>
-            {QUICK_REACTIONS.map((emoji) => (
-              <Pressable
-                key={emoji}
-                onPress={() => {
-                  onSelect(emoji);
-                  onClose();
-                }}
-                style={({ pressed }) => [
-                  styles.emojiButton,
-                  {
-                    backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
-                  },
-                ]}
-              >
-                <Text style={styles.emoji}>{emoji}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </BlurView>
-      </Pressable>
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        exiting={FadeOut.duration(150)}
+        style={StyleSheet.absoluteFill}
+      >
+        <Pressable style={styles.overlay} onPress={onClose}>
+          <BlurView
+            intensity={20}
+            tint={theme}
+            style={styles.blurContainer}
+          >
+            <Animated.View
+              entering={ZoomIn.duration(250).springify()}
+              exiting={ZoomOut.duration(200)}
+              style={[styles.pickerContainer, { backgroundColor: colors.surface }]}
+            >
+              {QUICK_REACTIONS.map((emoji) => (
+                <Pressable
+                  key={emoji}
+                  onPress={() => {
+                    onSelect(emoji);
+                    onClose();
+                  }}
+                  style={({ pressed }) => [
+                    styles.emojiButton,
+                    {
+                      backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text style={styles.emoji}>{emoji}</Text>
+                </Pressable>
+              ))}
+            </Animated.View>
+          </BlurView>
+        </Pressable>
+      </Animated.View>
     </Modal>
   );
 }

@@ -1,12 +1,49 @@
 // Openflou Chats Tab
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
+import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { ChatListItem, EmptyState } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+
+function AnimatedFAB({ icon, onPress, bottom, backgroundColor, iconColor, delay }: any) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(400).delay(delay).springify()}
+      style={[styles.fab, { bottom }, animatedStyle]}
+    >
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => {
+          scale.value = withSpring(0.85, { damping: 15 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 15 });
+        }}
+        style={({ pressed }) => [{
+          width: '100%',
+          height: '100%',
+          borderRadius: 28,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor,
+          opacity: pressed ? 0.8 : 1,
+        }]}
+      >
+        <MaterialIcons name={icon} size={24} color={iconColor} />
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export default function ChatsTab() {
   const { colors, t, chats, loadChats, currentUser, theme } = useOpenFlou();
@@ -105,47 +142,32 @@ export default function ChatsTab() {
       )}
 
       {/* Floating Action Buttons */}
-      <Pressable
+      <AnimatedFAB
+        icon="edit"
         onPress={() => router.push('/contacts')}
-        style={({ pressed }) => [
-          styles.fab,
-          {
-            backgroundColor: colors.primary,
-            bottom: insets.bottom + 80,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-      >
-        <MaterialIcons name="edit" size={24} color={colors.textInverted} />
-      </Pressable>
+        bottom={insets.bottom + 80}
+        backgroundColor={colors.primary}
+        iconColor={colors.textInverted}
+        delay={0}
+      />
       
-      <Pressable
+      <AnimatedFAB
+        icon="campaign"
         onPress={() => router.push('/create-channel')}
-        style={({ pressed }) => [
-          styles.fab,
-          {
-            backgroundColor: colors.surfaceSecondary,
-            bottom: insets.bottom + 148,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-      >
-        <MaterialIcons name="campaign" size={24} color={colors.primary} />
-      </Pressable>
+        bottom={insets.bottom + 148}
+        backgroundColor={colors.surfaceSecondary}
+        iconColor={colors.primary}
+        delay={100}
+      />
       
-      <Pressable
+      <AnimatedFAB
+        icon="group-add"
         onPress={() => router.push('/create-group')}
-        style={({ pressed }) => [
-          styles.fab,
-          {
-            backgroundColor: colors.surfaceSecondary,
-            bottom: insets.bottom + 216,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-      >
-        <MaterialIcons name="group-add" size={24} color={colors.primary} />
-      </Pressable>
+        bottom={insets.bottom + 216}
+        backgroundColor={colors.surfaceSecondary}
+        iconColor={colors.primary}
+        delay={200}
+      />
     </SafeAreaView>
   );
 }
@@ -200,9 +222,6 @@ const styles = StyleSheet.create({
     right: 16,
     width: 56,
     height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,

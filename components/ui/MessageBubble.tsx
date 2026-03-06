@@ -1,6 +1,7 @@
 // Openflou Message Bubble Component
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import Animated, { FadeInUp, FadeOutDown, ZoomIn, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Message, Reaction } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -15,6 +16,11 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReactionPress }: MessageBubbleProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   const formatTime = (date: Date) => {
     const d = new Date(date);
     const hours = d.getHours().toString().padStart(2, '0');
@@ -93,9 +99,19 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
   const hasReactions = Object.keys(reactions).length > 0;
 
   return (
-    <View style={{ alignSelf: isOutgoing ? 'flex-end' : 'flex-start' }}>
+    <Animated.View
+      entering={FadeInUp.duration(300).springify()}
+      exiting={FadeOutDown.duration(200)}
+      style={[{ alignSelf: isOutgoing ? 'flex-end' : 'flex-start' }, animatedStyle]}
+    >
       <Pressable
         onLongPress={onLongPress}
+        onPressIn={() => {
+          scale.value = withSpring(0.95, { damping: 15 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 15 });
+        }}
         style={[
           styles.bubble,
           {
@@ -122,7 +138,10 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
       </Pressable>
       
       {hasReactions && (
-        <View style={[styles.reactionsContainer, { alignSelf: isOutgoing ? 'flex-end' : 'flex-start' }]}>
+        <Animated.View
+          entering={ZoomIn.duration(200).springify()}
+          style={[styles.reactionsContainer, { alignSelf: isOutgoing ? 'flex-end' : 'flex-start' }]}
+        >
           {Object.entries(reactions).map(([emoji, userIds]) => (
             <Pressable
               key={emoji}
@@ -135,9 +154,9 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
               }</Text>
             </Pressable>
           ))}
-        </View>
+        </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

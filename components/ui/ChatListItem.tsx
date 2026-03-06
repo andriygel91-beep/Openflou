@@ -1,6 +1,7 @@
 // Openflou Chat List Item Component
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import Animated, { FadeInRight, FadeOutLeft, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Chat } from '@/types';
 import { Avatar } from './Avatar';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,6 +15,11 @@ interface ChatListItemProps {
 }
 
 export function ChatListItem({ chat, colors, t, currentUserId, onPress }: ChatListItemProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   const formatTime = (date?: Date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -47,15 +53,26 @@ export function ChatListItem({ chat, colors, t, currentUserId, onPress }: ChatLi
   };
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.container,
-        {
-          backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
-        },
-      ]}
+    <Animated.View
+      entering={FadeInRight.duration(300).springify()}
+      exiting={FadeOutLeft.duration(200)}
+      style={animatedStyle}
     >
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => {
+          scale.value = withSpring(0.97, { damping: 15 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 15 });
+        }}
+        style={({ pressed }) => [
+          styles.container,
+          {
+            backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
+          },
+        ]}
+      >
       <Avatar
         uri={chat.avatar}
         username={chat.name || chat.id}
@@ -107,7 +124,8 @@ export function ChatListItem({ chat, colors, t, currentUserId, onPress }: ChatLi
           </View>
         </View>
       </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 

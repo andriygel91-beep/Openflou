@@ -1,6 +1,7 @@
 // Openflou Avatar Component
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 
 interface AvatarProps {
@@ -35,7 +36,7 @@ export function Avatar({ uri, username, size = 48, isOnline, colors }: AvatarPro
   const bgColor = avatarColors[colorIndex];
 
   return (
-    <View style={{ position: 'relative' }}>
+    <Animated.View entering={FadeIn.duration(300)} style={{ position: 'relative' }}>
       {uri ? (
         <Image
           source={{ uri }}
@@ -54,7 +55,8 @@ export function Avatar({ uri, username, size = 48, isOnline, colors }: AvatarPro
         </View>
       )}
       {isOnline && (
-        <View
+        <Animated.View
+          entering={ZoomIn.duration(200).springify()}
           style={[
             styles.onlineIndicator,
             {
@@ -69,7 +71,7 @@ export function Avatar({ uri, username, size = 48, isOnline, colors }: AvatarPro
           ]}
         />
       )}
-    </View>
+    </Animated.View>
   );
 }
 
