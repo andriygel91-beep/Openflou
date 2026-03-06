@@ -1,4 +1,4 @@
-name: Build APK Release (Optimized)
+name: Build APK Release (Final Optimization)
 on:
   workflow_dispatch:
 
@@ -29,32 +29,39 @@ jobs:
           pnpm install --no-frozen-lockfile
           pnpm add -D babel-preset-expo
 
-      - name: 🔧 Optimize Android Project
+      - name: 🏗 Prebuild Android Directory
         run: |
-          # Включаем MultiDex и фильтруем архитектуры, чтобы билд не падал и шел быстрее
+          # Сначала генерируем папку android
+          npx expo prebuild --platform android --no-install
+
+      - name: 🔧 Optimize Android Project (MultiDex + ABI Filter)
+        run: |
+          # Теперь, когда папка android создана, правим файлы
           FILE="android/app/build.gradle"
+          
+          # 1. Включаем MultiDex (чтобы не падал DexMerging)
           sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE
-          sed -i '/abiFilters /d' $FILE # Удаляем старые фильтры если есть
-          sed -i '/ndk {/a \            abiFilters "arm64-v8a"' $FILE
+          
+          # 2. Ограничиваем сборку только архитектурой arm64-v8a для скорости
+          # Ищем блок buildTypes { release { ... } } и вставляем туда фильтр
+          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE
 
       - name: 🚀 Build Release APK
         env:
           NODE_ENV: production
-          _JAVA_OPTIONS: "-Xmx4g" # Даем больше оперативы Java-машине
+          _JAVA_OPTIONS: "-Xmx4g"
         run: |
-          # Создаем пустой конфиг метро, если его нет
+          # Создаем базовый конфиг метро
           echo "const { getDefaultConfig } = require('expo/metro-config'); module.exports = getDefaultConfig(__dirname);" > metro.config.js
-          
-          npx expo prebuild --platform android
           
           cd android
           chmod +x gradlew
-          # Собираем только одну архитектуру (это ОЧЕНЬ ускорит процесс)
-          ./gradlew assembleRelease -Pandroid.injected.abiCombo=arm64-v8a
+          # Собираем финальный APK
+          ./gradlew assembleRelease
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Arm64-Only
+          name: OpenFlou-Success-Final
           path: android/app/build/outputs/apk/release/app-release.apk
           
