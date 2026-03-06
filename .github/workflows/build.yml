@@ -30,28 +30,39 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. СОЗДАЕМ КОНФИГ ПЕРВЫМ ДЕЛОМ (лечит скрин #16:26)
-          cat <<EOF > metro.config.js
-          const { getDefaultConfig } = require('expo/metro-config');
-          const path = require('path');
-          const config = getDefaultConfig(__dirname);
-          config.resolver.alias = {
-            '@': path.resolve(__dirname),
+          # 1. Создаем универсальный Babel Config (для поддержки @/ везде)
+          cat <<'EOF' > babel.config.js
+          module.exports = function (api) {
+            api.cache(true);
+            return {
+              presets: ['babel-preset-expo'],
+              plugins: [
+                [
+                  'module-resolver',
+                  {
+                    root: ['./'],
+                    alias: { '@': './' },
+                  },
+                ],
+              ],
+            };
           };
+          EOF
+
+          # 2. Создаем Metro Config, который подхватит Babel
+          cat <<'EOF' > metro.config.js
+          const { getDefaultConfig } = require('expo/metro-config');
+          const config = getDefaultConfig(__dirname);
           module.exports = config;
           EOF
 
-          # 2. Исправляем пути в файлах (подстраховка для Metro)
-          find app -type f -name "*.tsx" -print0 | xargs -0 sed -i "s|@/hooks/|../hooks/|g" || true
-          find app -type f -name "*.tsx" -print0 | xargs -0 sed -i "s|@/services/|../services/|g" || true
+          # 3. Устанавливаем плагин для резолвинга путей
+          pnpm add -D babel-plugin-module-resolver @react-native-community/cli
 
-          # 3. Установка инструментов
-          pnpm add -D @react-native-community/cli
+          # 4. Предсборка
+          npx expo prebuild --platform android --no-interactive
           
-          # 4. Предсборка (теперь конфиг на месте, Expo не ругнется)
-          npx expo prebuild --platform android
-          
-          # 5. Сборка бандла
+          # 5. Сборка бандла (теперь Babel сам поймет, что такое @/)
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
@@ -59,13 +70,12 @@ jobs:
             --assets-dest android/app/src/main/res \
             --reset-cache
 
-          # 6. Финальный APK
+          # 6. Финальная компиляция APK
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-V27-Final
+          name: OpenFlou-Universal-V29
           path: android/app/build/outputs/apk/release/app-release.apk
-          
