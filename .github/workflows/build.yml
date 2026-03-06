@@ -19,18 +19,22 @@ jobs:
         with:
           version: 8
 
-      - name: 📦 Install EAS CLI
-        run: pnpm add -g eas-cli
+      - name: 📦 Install CLI Tools
+        run: pnpm add -g eas-cli expo-cli
 
       - name: 📦 Install Dependencies
         run: pnpm install
 
-      - name: 🚀 Build Local APK
-        run: npx eas-cli build --platform android --profile preview --local --non-interactive
+      - name: 🚀 Build APK Locally
+        # Мы отключаем проверку аккаунта и телеметрию, чтобы сборка не просила логин
+        env:
+          EXPO_NO_TELEMETRY: 1
+          EAS_NO_VCS: 1
+        run: npx eas-cli build --platform android --profile preview --local --non-interactive --skip-credentials-check
 
-      - name: 📂 Upload APK
+      - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: messenger-app
+          name: messenger-app-apk
           path: "*.apk"
           
