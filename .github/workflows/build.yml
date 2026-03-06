@@ -1,9 +1,38 @@
+name: Build APK Release
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🏗 Install pnpm
+        run: npm install -g pnpm
+
+      - name: 🏗 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --no-frozen-lockfile
+
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Создаем продвинутый Metro Config с поддержкой алиаса @/
-          cat <<EOF > metro.config.js
+          # 1. Создаем Metro Config, который ПРИНУДИТЕЛЬНО понимает пути @/
+          # Это лечит ошибку со скриншота №16:17
+          cat <<'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const path = require('path');
           const config = getDefaultConfig(__dirname);
@@ -13,18 +42,27 @@
           module.exports = config;
           EOF
 
+          # 2. Установка необходимых инструментов
           pnpm add -D @react-native-community/cli
-          npx expo prebuild --platform android
           
+          # 3. Подготовка нативного кода
+          npx expo prebuild --platform android --no-interactive
+          
+          # 4. Сборка бандла (критически важно для работы без белого экрана)
           mkdir -p android/app/src/main/assets
-          
-          # Сборка бандла с ПРИНУДИТЕЛЬНЫМ сбросом кэша
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
             --config metro.config.js --reset-cache
-          
+
+          # 5. Финальная компиляция
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
+
+      - name: 📂 Upload Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlou-Messenger-V25
+          path: android/app/build/outputs/apk/release/app-release.apk
           
