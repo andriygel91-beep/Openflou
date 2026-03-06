@@ -1,44 +1,24 @@
-name: Build APK Release
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 🏗 Install pnpm
-        run: npm install -g pnpm
-
-      - name: 🏗 Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 📦 Install Dependencies
-        run: pnpm install --no-frozen-lockfile
-
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Создаем Metro Config с поддержкой относительных путей
-          echo "const { getDefaultConfig } = require('expo/metro-config'); const config = getDefaultConfig(__dirname); config.resolver.nodeModulesPaths = [require('path').resolve(__dirname, 'node_modules')]; module.exports = config;" > metro.config.js
-          
+          # Создаем продвинутый Metro Config с поддержкой алиаса @/
+          cat <<EOF > metro.config.js
+          const { getDefaultConfig } = require('expo/metro-config');
+          const path = require('path');
+          const config = getDefaultConfig(__dirname);
+          config.resolver.alias = {
+            '@': path.resolve(__dirname),
+          };
+          module.exports = config;
+          EOF
+
           pnpm add -D @react-native-community/cli
           npx expo prebuild --platform android
           
           mkdir -p android/app/src/main/assets
           
-          # Сборка бандла (Добавили флаг для сброса кэша)
+          # Сборка бандла с ПРИНУДИТЕЛЬНЫМ сбросом кэша
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
@@ -47,10 +27,4 @@ jobs:
           
           cd android
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
-
-      - name: 📂 Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenFlou-Messenger-Final
-          path: android/app/build/outputs/apk/release/app-release.apk
           
