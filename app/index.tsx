@@ -1,14 +1,14 @@
 // Openflou Root Index - Auth Check
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import * as storage from '@/services/storage';
 
 export default function RootIndex() {
-  const { currentUser, setCurrentUser, colors } = useOpenFlou();
+  const { currentUser, setCurrentUser } = useOpenFlou();
   const router = useRouter();
   const [loading, setLoading] = React.useState(true);
+  const [showSplash, setShowSplash] = React.useState(true);
 
   useEffect(() => {
     checkAuth();
@@ -21,21 +21,28 @@ export default function RootIndex() {
       if (authState?.isAuthenticated && authState.currentUser) {
         setCurrentUser(authState.currentUser);
         setLoading(false);
+        // Skip splash if already authenticated
+        setShowSplash(false);
       } else {
         setLoading(false);
+        // Show splash for new users
+        setTimeout(() => {
+          setShowSplash(false);
+        }, 3500);
       }
     } catch (error) {
       console.error('Auth check error:', error);
       setLoading(false);
+      setTimeout(() => {
+        setShowSplash(false);
+      }, 3500);
     }
   }
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+  if (loading || showSplash) {
+    if (!currentUser) {
+      return <Redirect href="/splash" />;
+    }
   }
 
   if (currentUser) {

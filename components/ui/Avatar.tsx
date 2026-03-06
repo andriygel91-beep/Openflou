@@ -40,19 +40,23 @@ export function Avatar({ uri, username, size = 48, isOnline, colors }: AvatarPro
       {uri ? (
         <Image
           source={{ uri }}
-          style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+          style={[
+            styles.avatar,
+            { width: size, height: size, borderRadius: size / 2 },
+          ]}
           contentFit="cover"
           transition={200}
         />
       ) : (
-        <View
+        <Animated.View
+          entering={FadeIn.duration(300)}
           style={[
             styles.avatarPlaceholder,
             { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor },
           ]}
         >
           <Text style={[styles.initialsText, { fontSize: size * 0.4 }]}>{initials}</Text>
-        </View>
+        </Animated.View>
       )}
       {isOnline && (
         <Animated.View
@@ -76,10 +80,13 @@ export function Avatar({ uri, username, size = 48, isOnline, colors }: AvatarPro
 }
 
 const styles = StyleSheet.create({
-  avatar: {},
+  avatar: {
+    overflow: 'hidden',
+  },
   avatarPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   initialsText: {
     color: '#FFFFFF',

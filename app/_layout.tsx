@@ -19,6 +19,13 @@ export default function RootLayout() {
           >
             <Stack.Screen name="index" />
             <Stack.Screen
+              name="splash"
+              options={{
+                animation: 'fade',
+                animationDuration: 400,
+              }}
+            />
+            <Stack.Screen
               name="auth"
               options={{
                 animation: 'fade',
