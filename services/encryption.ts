@@ -1,15 +1,39 @@
 // Openflou Encryption Service - End-to-End Encryption (Demo)
-import CryptoJS from 'crypto-js';
-
 // Note: This is a simplified demo encryption for V1.0
 // Production should use proper E2E encryption libraries
 
-const ENCRYPTION_KEY = 'openflou_secure_key_v1'; // In production, use per-chat keys
+const ENCRYPTION_KEY = 'openflou_secure_key_v1';
+
+// Simple hash function for ID generation
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+// Simple base64 encode/decode
+function base64Encode(str: string): string {
+  return Buffer.from(str, 'utf-8').toString('base64');
+}
+
+function base64Decode(str: string): string {
+  return Buffer.from(str, 'base64').toString('utf-8');
+}
 
 export function encryptMessage(plaintext: string): string {
   try {
-    const encrypted = CryptoJS.AES.encrypt(plaintext, ENCRYPTION_KEY).toString();
-    return encrypted;
+    // Simple XOR encryption for demo purposes
+    let encrypted = '';
+    for (let i = 0; i < plaintext.length; i++) {
+      const keyChar = ENCRYPTION_KEY.charCodeAt(i % ENCRYPTION_KEY.length);
+      const textChar = plaintext.charCodeAt(i);
+      encrypted += String.fromCharCode(textChar ^ keyChar);
+    }
+    return base64Encode(encrypted);
   } catch (error) {
     console.error('Encryption failed:', error);
     return plaintext;
@@ -18,9 +42,14 @@ export function encryptMessage(plaintext: string): string {
 
 export function decryptMessage(ciphertext: string): string {
   try {
-    const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
-    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
-    return decrypted || ciphertext;
+    const decoded = base64Decode(ciphertext);
+    let decrypted = '';
+    for (let i = 0; i < decoded.length; i++) {
+      const keyChar = ENCRYPTION_KEY.charCodeAt(i % ENCRYPTION_KEY.length);
+      const textChar = decoded.charCodeAt(i);
+      decrypted += String.fromCharCode(textChar ^ keyChar);
+    }
+    return decrypted;
   } catch (error) {
     console.error('Decryption failed:', error);
     return ciphertext;
@@ -35,10 +64,12 @@ export function generateMessageId(): string {
 // Generate unique chat ID
 export function generateChatId(participants: string[]): string {
   const sorted = [...participants].sort().join('_');
-  return `chat_${CryptoJS.MD5(sorted).toString()}`;
+  const hash = simpleHash(sorted);
+  return `chat_${hash}`;
 }
 
 // Generate unique user ID
 export function generateUserId(username: string): string {
-  return `user_${CryptoJS.MD5(username.toLowerCase()).toString()}`;
+  const hash = simpleHash(username.toLowerCase());
+  return `user_${hash}`;
 }
