@@ -25,13 +25,16 @@ jobs:
       - name: 📦 Install Dependencies
         run: pnpm install
 
-      - name: 🚀 Build APK
-        # Теперь мы используем ваш токен для авторизации
+      - name: 🚀 Configure and Build APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli build --platform android --profile preview --local --non-interactive
-
-      - name: 📂 Upload Result
+        run: |
+          # Инициализируем проект, если он не настроен
+          npx eas-cli project:init --non-interactive
+          # Запускаем локальную сборку
+          npx eas-cli build --platform android --profile preview --local --non-interactive
+          
+      - name: 📂 Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: messenger-app-apk
