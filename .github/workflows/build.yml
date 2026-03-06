@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK Release
 on:
   workflow_dispatch:
 
@@ -19,29 +19,31 @@ jobs:
         with:
           version: 8
 
-      - name: 🏗 Setup Java (нужен для Android)
+      - name: 🏗 Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: 📦 Install Dependencies
-        run: |
-          pnpm install --no-frozen-lockfile
-          pnpm add -g expo-cli eas-cli
+        run: pnpm install --no-frozen-lockfile
 
-      - name: 🚀 Prebuild and Local Build
+      - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Генерируем папку android локально
-          npx expo prebuild --platform android
-          # 2. Собираем APK напрямую через Gradle, минуя Keystore от Expo
-          cd android && ./gradlew assembleDebug
+          # Генерация нативного кода
+          npx expo prebuild --platform android --clean
+          cd android
+          # Полная очистка перед сборкой
+          ./gradlew clean
+          # Сборка финального APK
+          ./gradlew assembleRelease
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: messenger-app-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: OpenFlou-Messenger-Release
+          # Указываем путь только к готовому файлу
+          path: android/app/build/outputs/apk/release/app-release.apk
           
