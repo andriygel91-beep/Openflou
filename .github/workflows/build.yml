@@ -20,23 +20,19 @@ jobs:
           version: 8
 
       - name: 📦 Install Tools
-        run: pnpm add -g eas-cli expo-cli
+        run: pnpm add -g eas-cli
 
       - name: 📦 Install Dependencies
         run: pnpm install
 
-      - name: 🚀 Configure and Build APK
+      - name: 🚀 Final Build Attempt
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Принудительная привязка проекта
+          # Автоматически создаем проект и ключи, если их нет
           npx eas-cli project:init --non-interactive --force
-          
-          # 2. Создаем ключи (Keystore) в аккаунте Expo
-          npx eas-cli build --platform android --profile preview --non-interactive --no-wait
-          
-          # 3. Запускаем локальную сборку APK
-          npx eas-cli build --platform android --profile preview --local --non-interactive
+          # Прямая команда сборки с автоматическим подтверждением всего
+          npx eas-cli build --platform android --profile preview --local --non-interactive --clear-cache
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
