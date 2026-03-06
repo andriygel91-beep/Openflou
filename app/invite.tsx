@@ -59,10 +59,6 @@ export default function InviteScreen() {
               size={220}
               backgroundColor={theme === 'dark' ? '#1E1E1E' : '#FFFFFF'}
               color={theme === 'dark' ? '#FFFFFF' : '#000000'}
-              logo={require('@/assets/icon.png')}
-              logoSize={50}
-              logoBackgroundColor={colors.primary}
-              logoBorderRadius={10}
             />
           </View>
           <Text style={[styles.urlText, { color: colors.textTertiary }]}>
