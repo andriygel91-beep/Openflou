@@ -19,19 +19,29 @@ jobs:
         with:
           version: 8
 
-      - name: 📦 Install Tools
-        run: pnpm add -g eas-cli
+      - name: 🏗 Setup Java (нужен для Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: 📦 Install Dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm add -g expo-cli eas-cli
 
-      - name: 🚀 Force Build APK
+      - name: 🚀 Prebuild and Local Build
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli project:init --non-interactive --force
-          # Пытаемся создать ключи в автоматическом режиме через отдельную команду
-          npx eas-cli build --platform android --profile preview --non-interactive --no-wait || true
-          # Запуск сборки с игнорированием проверки ключей
-          npx eas-cli build --platform android --profile preview --local --non-interactive --clear-cache
+          # 1. Генерируем папку android локально
+          npx expo prebuild --platform android
+          # 2. Собираем APK напрямую через Gradle, минуя Keystore от Expo
+          cd android && ./gradlew assembleDebug
+
+      - name: 📂 Upload Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: messenger-app-apk
+          path: android/app/build/outputs/apk/debug/*.apk
           
