@@ -26,14 +26,14 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pnpm install --no-frozen-lockfile
-          # Исправляем ошибку со скриншота (Babel runtime)
-          pnpm add @babel/runtime babel-plugin-module-resolver
+          # Принудительно ставим CLI и хелперы, чтобы не было ошибки как на фото
+          pnpm add -D @react-native-community/cli @babel/runtime babel-plugin-module-resolver
 
       - name: 🚀 Build Release APK
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # 1. Генерируем Babel Config (Алиасы + фикс Runtime)
+          # 1. Создаем Babel Config (лечит проблему с @/ и импортами)
           cat <<'EOF' > babel.config.js
           module.exports = function (api) {
             api.cache(true);
@@ -50,17 +50,17 @@ jobs:
           };
           EOF
 
-          # 2. Генерируем Metro Config
+          # 2. Создаем Metro Config
           cat <<'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const config = getDefaultConfig(__dirname);
           module.exports = config;
           EOF
 
-          # 3. Подготовка Android проекта
+          # 3. Генерируем нативный код Android
           npx expo prebuild --platform android
 
-          # 4. Сборка JS-бандла (Исправляем точку входа)
+          # 4. СОБИРАЕМ БАНДЛ (через npx, чтобы точно найти установленный CLI)
           mkdir -p android/app/src/main/assets
           npx react-native bundle --platform android --dev false \
             --entry-file node_modules/expo-router/entry.js \
@@ -68,7 +68,7 @@ jobs:
             --assets-dest android/app/src/main/res \
             --reset-cache
 
-          # 5. Компиляция APK
+          # 5. КОМПИЛЯЦИЯ (Добавили chmod для прав доступа)
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease -x bundleReleaseJsAndAssets
@@ -76,6 +76,6 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Success-V31
+          name: OpenFlou-V32-Final
           path: android/app/build/outputs/apk/release/app-release.apk
           
