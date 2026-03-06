@@ -1,4 +1,4 @@
-name: Build APK Release
+name: Build APK Release (Optimized)
 on:
   workflow_dispatch:
 
@@ -25,54 +25,36 @@ jobs:
 
       - name: 📦 Install Dependencies
         run: |
-          # Используем флаг для "плоской" структуры модулей (решает проблему с Babel)
           pnpm config set shamefully-hoist true
           pnpm install --no-frozen-lockfile
-          # Добавляем именно то, на что ругается лог
-          pnpm add -D babel-preset-expo babel-plugin-module-resolver @react-native-community/cli
+          pnpm add -D babel-preset-expo
+
+      - name: 🔧 Optimize Android Project
+        run: |
+          # Включаем MultiDex и фильтруем архитектуры, чтобы билд не падал и шел быстрее
+          FILE="android/app/build.gradle"
+          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE
+          sed -i '/abiFilters /d' $FILE # Удаляем старые фильтры если есть
+          sed -i '/ndk {/a \            abiFilters "arm64-v8a"' $FILE
 
       - name: 🚀 Build Release APK
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           NODE_ENV: production
+          _JAVA_OPTIONS: "-Xmx4g" # Даем больше оперативы Java-машине
         run: |
-          # 1. Babel Config (фиксируем алиас @/ и пресет)
-          cat <<'EOF' > babel.config.js
-          module.exports = function (api) {
-            api.cache(true);
-            return {
-              presets: ['babel-preset-expo'],
-              plugins: [['module-resolver', { root: ['./'], alias: { '@': './' } }]],
-            };
-          };
-          EOF
-
-          # 2. Metro Config
-          cat <<'EOF' > metro.config.js
-          const { getDefaultConfig } = require('expo/metro-config');
-          const config = getDefaultConfig(__dirname);
-          module.exports = config;
-          EOF
-
-          # 3. Предсборка
+          # Создаем пустой конфиг метро, если его нет
+          echo "const { getDefaultConfig } = require('expo/metro-config'); module.exports = getDefaultConfig(__dirname);" > metro.config.js
+          
           npx expo prebuild --platform android
-
-          # 4. Сборка бандла (теперь Babel всё найдет)
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle --platform android --dev false \
-            --entry-file node_modules/expo-router/entry.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res \
-            --reset-cache
-
-          # 5. Финальная упаковка APK
+          
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          # Собираем только одну архитектуру (это ОЧЕНЬ ускорит процесс)
+          ./gradlew assembleRelease -Pandroid.injected.abiCombo=arm64-v8a
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Success-V34
+          name: OpenFlou-Arm64-Only
           path: android/app/build/outputs/apk/release/app-release.apk
           
