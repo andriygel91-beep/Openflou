@@ -93,12 +93,19 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   }, [currentUser?.id]);
 
   async function createSavedMessagesChat() {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('⚠️ Context: No current user, skipping saved messages');
+      return;
+    }
     
     try {
       const savedChatId = `saved_${currentUser.id}`;
+      console.log('🔍 Context: Checking for saved chat:', savedChatId);
+      
       const existingChats = await api.getChats(currentUser.id);
       const hasSavedChat = existingChats.some((c) => c.id === savedChatId);
+      
+      console.log('🔍 Context: Has saved chat?', hasSavedChat, 'Existing chats:', existingChats.length);
       
       if (!hasSavedChat) {
         const savedChat: Chat = {
@@ -114,11 +121,19 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
           createdAt: new Date(),
         };
         
-        await api.createChat(savedChat);
-        console.log('Context: Created saved messages chat');
+        console.log('📝 Context: Creating saved messages chat:', savedChat);
+        const result = await api.createChat(savedChat);
+        if (result.error) {
+          console.error('❌ Context: Failed to create saved messages:', result.error);
+        } else {
+          console.log('✅ Context: Created saved messages chat successfully');
+          await loadChats();
+        }
+      } else {
+        console.log('✅ Context: Saved messages chat already exists');
       }
     } catch (error) {
-      console.error('Error creating saved messages:', error);
+      console.error('❌ Context: Error creating saved messages:', error);
     }
   }
 
@@ -209,28 +224,28 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
 
   async function loadChats() {
     if (!currentUser) {
-      console.log('Context: No user, cannot load chats');
+      console.log('⚠️ Context: No user, cannot load chats');
       return;
     }
     
-    console.log('Context: Loading chats for user:', currentUser.id);
+    console.log('🔄 Context: Loading chats for user:', currentUser.id, currentUser.username);
     try {
       const loadedChats = await api.getChats(currentUser.id);
-      console.log('Context: Loaded chats:', loadedChats.length);
+      console.log('✅ Context: Loaded chats:', loadedChats.length, loadedChats.map(c => ({ id: c.id, type: c.type, name: c.name })));
       setChats(loadedChats);
     } catch (error) {
-      console.error('Context: Error loading chats:', error);
+      console.error('❌ Context: Error loading chats:', error);
     }
   }
 
   async function addChat(chat: Chat): Promise<{ error: string | null }> {
-    console.log('Context: Adding chat:', chat.name);
+    console.log('📝 Context: Adding chat:', chat.name, 'type:', chat.type, 'id:', chat.id);
     const { error } = await api.createChat(chat);
     if (!error) {
-      console.log('Context: Chat created, reloading list');
+      console.log('✅ Context: Chat created, reloading list');
       await loadChats();
     } else {
-      console.error('Context: Error creating chat:', error);
+      console.error('❌ Context: Error creating chat:', error);
     }
     return { error };
   }

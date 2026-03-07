@@ -192,7 +192,7 @@ export async function updateUser(user: User): Promise<{ error: string | null }> 
 
 export async function getChats(userId: string): Promise<Chat[]> {
   try {
-    console.log('API: Getting chats for user:', userId);
+    console.log('✅ API: Getting chats for user:', userId);
     
     const { data, error } = await supabase
       .from('openflou_chats')
@@ -200,22 +200,31 @@ export async function getChats(userId: string): Promise<Chat[]> {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      console.error('Get chats DB error:', error);
+      console.error('❌ Get chats DB error:', error);
       throw error;
     }
 
-    console.log('API: Raw chats from DB:', data?.length || 0);
+    console.log('📊 API: Raw chats from DB:', data?.length || 0, data?.map(c => ({ id: c.id, type: c.type, name: c.name, participants: c.participants })));
 
     // Filter chats where user is participant
     const userChats = (data || []).filter((chat) => {
       // Saved messages
-      if (chat.type === 'saved') return chat.id === `saved_${userId}`;
+      if (chat.type === 'saved') {
+        const match = chat.id === `saved_${userId}`;
+        console.log('🔍 Saved chat check:', chat.id, 'expected:', `saved_${userId}`, 'match:', match);
+        return match;
+      }
       // For other chats, check participants array
-      if (!chat.participants || !Array.isArray(chat.participants)) return false;
-      return chat.participants.includes(userId);
+      if (!chat.participants || !Array.isArray(chat.participants)) {
+        console.log('⚠️ Chat has no participants array:', chat.id);
+        return false;
+      }
+      const isParticipant = chat.participants.includes(userId);
+      console.log('🔍 Chat participant check:', chat.id, 'type:', chat.type, 'participants:', chat.participants, 'userId:', userId, 'match:', isParticipant);
+      return isParticipant;
     });
 
-    console.log('API: Filtered user chats:', userChats.length);
+    console.log('✅ API: Filtered user chats:', userChats.length);
 
     // For each chat, get last message
     const chatsWithMessages = await Promise.all(
@@ -241,16 +250,19 @@ export async function getChats(userId: string): Promise<Chat[]> {
       })
     );
 
+    console.log('✅ API: Returning chats with messages:', chatsWithMessages.length);
     return chatsWithMessages;
   } catch (error) {
-    console.error('Get chats error:', error);
+    console.error('❌ Get chats error:', error);
     return [];
   }
 }
 
 export async function createChat(chat: Chat): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase.from('openflou_chats').insert({
+    console.log('📝 API: Creating chat:', chat.id, 'type:', chat.type, 'name:', chat.name, 'participants:', chat.participants);
+    
+    const { data, error } = await supabase.from('openflou_chats').insert({
       id: chat.id,
       type: chat.type,
       name: chat.name,
@@ -259,11 +271,17 @@ export async function createChat(chat: Chat): Promise<{ error: string | null }> 
       description: chat.description,
       participants: chat.participants,
       admins: chat.admins || [],
-    });
+    }).select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Create chat error:', error);
+      throw error;
+    }
+    
+    console.log('✅ Chat created:', data);
     return { error: null };
   } catch (error: any) {
+    console.error('❌ Create chat exception:', error);
     return { error: error.message };
   }
 }
