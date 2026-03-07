@@ -52,19 +52,23 @@ export default function ChatsTab() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    loadChats();
-  }, []);
+    if (currentUser) {
+      console.log('Chats tab: loading chats');
+      loadChats();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     // Auto-refresh chats when screen is focused
+    if (!currentUser) return;
+    
     const interval = setInterval(() => {
-      if (currentUser) {
-        loadChats();
-      }
-    }, 3000);
+      console.log('Auto-refresh chats');
+      loadChats();
+    }, 5000);
     
     return () => clearInterval(interval);
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const filteredChats = chats.filter((chat) =>
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -86,7 +90,7 @@ export default function ChatsTab() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>{t.authTitle}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t.chats || 'Chats'}</Text>
           <View style={styles.headerActions}>
             <Pressable
               onPress={() => router.push('/search-messages')}

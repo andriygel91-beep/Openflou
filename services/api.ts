@@ -192,6 +192,8 @@ export async function updateUser(user: User): Promise<{ error: string | null }> 
 
 export async function getChats(userId: string): Promise<Chat[]> {
   try {
+    console.log('API: Getting chats for user:', userId);
+    
     const { data, error } = await supabase
       .from('openflou_chats')
       .select('*')
@@ -202,13 +204,18 @@ export async function getChats(userId: string): Promise<Chat[]> {
       throw error;
     }
 
-    // Filter chats where user is participant (including channels - they don't have participants array)
+    console.log('API: Raw chats from DB:', data?.length || 0);
+
+    // Filter chats where user is participant
     const userChats = (data || []).filter((chat) => {
-      // Channels and saved messages are always visible
-      if (chat.type === 'channel' || chat.type === 'saved') return true;
-      // For groups and private chats, check participants
-      return chat.participants && Array.isArray(chat.participants) && chat.participants.includes(userId);
+      // Saved messages
+      if (chat.type === 'saved') return chat.id === `saved_${userId}`;
+      // For other chats, check participants array
+      if (!chat.participants || !Array.isArray(chat.participants)) return false;
+      return chat.participants.includes(userId);
     });
+
+    console.log('API: Filtered user chats:', userChats.length);
 
     // For each chat, get last message
     const chatsWithMessages = await Promise.all(

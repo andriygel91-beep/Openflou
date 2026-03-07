@@ -6,7 +6,6 @@ import * as api from '@/services/api';
 import { lightColors, darkColors } from '@/constants/theme';
 import { translations } from '@/constants/translations';
 import { Appearance } from 'react-native';
-import { generateChatId } from '@/services/encryption';
 
 interface OpenFlouContextType {
   // Theme & Language
@@ -81,52 +80,52 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (currentUser) {
       createSavedMessagesChat();
-      // Update session activity
       api.updateSessionActivity(currentUser.id);
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
-  // Auto-sync chats every 3 seconds
+  // Load chats when user changes
   useEffect(() => {
-    if (!currentUser) return;
-    
-    loadChats();
-    
-    const interval = setInterval(() => {
+    if (currentUser) {
+      console.log('Context: User changed, loading chats');
       loadChats();
-    }, 3000);
-    
-    return () => clearInterval(interval);
-  }, [currentUser]);
+    }
+  }, [currentUser?.id]);
 
   async function createSavedMessagesChat() {
     if (!currentUser) return;
     
-    const savedChatId = `saved_${currentUser.id}`;
-    const existingChats = await api.getChats(currentUser.id);
-    const hasSavedChat = existingChats.some((c) => c.id === savedChatId);
-    
-    if (!hasSavedChat) {
-      const savedChat: Chat = {
-        id: savedChatId,
-        type: 'saved',
-        name: t.savedMessages || 'Saved Messages',
-        avatar: currentUser.avatar,
-        participants: [currentUser.id],
-        admins: [currentUser.id],
-        unreadCount: 0,
-        isPinned: true,
-        isMuted: false,
-        createdAt: new Date(),
-      };
+    try {
+      const savedChatId = `saved_${currentUser.id}`;
+      const existingChats = await api.getChats(currentUser.id);
+      const hasSavedChat = existingChats.some((c) => c.id === savedChatId);
       
-      await api.createChat(savedChat);
+      if (!hasSavedChat) {
+        const savedChat: Chat = {
+          id: savedChatId,
+          type: 'saved',
+          name: t.savedMessages || 'Saved Messages',
+          avatar: currentUser.avatar,
+          participants: [currentUser.id],
+          admins: [currentUser.id],
+          unreadCount: 0,
+          isPinned: true,
+          isMuted: false,
+          createdAt: new Date(),
+        };
+        
+        await api.createChat(savedChat);
+        console.log('Context: Created saved messages chat');
+      }
+    } catch (error) {
+      console.error('Error creating saved messages:', error);
     }
   }
 
   async function loadUserSession() {
     const savedUser = await storage.getCurrentUser();
     if (savedUser) {
+      console.log('Context: Loaded user from storage:', savedUser.username);
       setCurrentUser(savedUser);
     }
   }
@@ -169,12 +168,23 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     await updateSettings({ theme: newTheme });
   }
 
-  async function setCurrentUserAndSave(user: User | null) {
+  async function setCurrentUserWrapper(user: User | null) {
+    console.log('Context: Setting current user:', user?.username || 'null');
     setCurrentUser(user);
     if (user) {
       await storage.saveCurrentUser(user);
+      await storage.saveAuthState({
+        isAuthenticated: true,
+        currentUser: user,
+        isNewUser: false,
+      });
     } else {
       await storage.clearCurrentUser();
+      await storage.saveAuthState({
+        isAuthenticated: false,
+        currentUser: null,
+        isNewUser: false,
+      });
     }
   }
 
@@ -198,17 +208,29 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadChats() {
-    if (!currentUser) return;
-    const loadedChats = await api.getChats(currentUser.id);
-    setChats(loadedChats);
+    if (!currentUser) {
+      console.log('Context: No user, cannot load chats');
+      return;
+    }
+    
+    console.log('Context: Loading chats for user:', currentUser.id);
+    try {
+      const loadedChats = await api.getChats(currentUser.id);
+      console.log('Context: Loaded chats:', loadedChats.length);
+      setChats(loadedChats);
+    } catch (error) {
+      console.error('Context: Error loading chats:', error);
+    }
   }
 
   async function addChat(chat: Chat): Promise<{ error: string | null }> {
+    console.log('Context: Adding chat:', chat.name);
     const { error } = await api.createChat(chat);
     if (!error) {
-      setChats((prev) => [...prev, chat]);
-      // Reload all chats to get updated list
+      console.log('Context: Chat created, reloading list');
       await loadChats();
+    } else {
+      console.error('Context: Error creating chat:', error);
     }
     return { error };
   }
@@ -328,7 +350,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         setTheme,
         setLanguage,
         currentUser,
-        setCurrentUser: setCurrentUserAndSave,
+        setCurrentUser: setCurrentUserWrapper,
         updateUser,
         chats,
         loadChats,
