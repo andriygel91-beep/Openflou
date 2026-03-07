@@ -16,6 +16,7 @@ export default function CreateChannelScreen() {
   const router = useRouter();
 
   const [channelName, setChannelName] = useState('');
+  const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
 
   async function handleCreate() {
@@ -30,6 +31,7 @@ export default function CreateChannelScreen() {
       id: generateChatId([currentUser.id, 'channel', Date.now().toString()]),
       type: 'channel',
       name: channelName.trim(),
+      username: username.trim() || undefined,
       description: description.trim() || undefined,
       participants: [currentUser.id],
       admins: [currentUser.id],
@@ -82,6 +84,15 @@ export default function CreateChannelScreen() {
               placeholderTextColor={colors.textTertiary}
               style={[styles.input, { color: colors.text }]}
               maxLength={50}
+            />
+            <TextInput
+              value={username}
+              onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              placeholder="@username (optional)"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.usernameInput, { color: colors.textSecondary }]}
+              maxLength={32}
+              autoCapitalize="none"
             />
           </View>
         </View>
@@ -171,6 +182,10 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 16,
+    marginBottom: 4,
+  },
+  usernameInput: {
+    fontSize: 14,
   },
   descriptionSection: {
     paddingHorizontal: 16,

@@ -17,6 +17,7 @@ export default function CreateGroupScreen() {
   const router = useRouter();
 
   const [groupName, setGroupName] = useState('');
+  const [username, setUsername] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function CreateGroupScreen() {
       id: generateChatId([currentUser.id, ...selectedMembers, Date.now().toString()]),
       type: 'group',
       name: groupName.trim(),
+      username: username.trim() || undefined,
       participants: [currentUser.id, ...selectedMembers],
       admins: [currentUser.id],
       unreadCount: 0,
@@ -94,14 +96,25 @@ export default function CreateGroupScreen() {
           <View style={[styles.groupIcon, { backgroundColor: colors.surfaceSecondary }]}>
             <MaterialIcons name="group" size={32} color={colors.icon} />
           </View>
-          <TextInput
-            value={groupName}
-            onChangeText={setGroupName}
-            placeholder={t.groupName}
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.groupInput, { color: colors.text }]}
-            maxLength={50}
-          />
+          <View style={styles.nameInputs}>
+            <TextInput
+              value={groupName}
+              onChangeText={setGroupName}
+              placeholder={t.groupName}
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.groupInput, { color: colors.text }]}
+              maxLength={50}
+            />
+            <TextInput
+              value={username}
+              onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              placeholder="@username (optional)"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.usernameInput, { color: colors.textSecondary }]}
+              maxLength={32}
+              autoCapitalize="none"
+            />
+          </View>
         </View>
 
         {/* Selected Count */}
@@ -205,10 +218,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  groupInput: {
+  nameInputs: {
     flex: 1,
     marginLeft: 16,
+  },
+  groupInput: {
     fontSize: 16,
+    marginBottom: 4,
+  },
+  usernameInput: {
+    fontSize: 14,
   },
   selectedCount: {
     paddingHorizontal: 16,

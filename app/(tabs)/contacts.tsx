@@ -212,6 +212,20 @@ export default function ContactsTab() {
               {t.importFromContacts}
             </Text>
           </Pressable>
+          
+          <Pressable
+            onPress={() => router.push('/join-chat')}
+            style={({ pressed }) => [
+              styles.joinButton,
+              {
+                backgroundColor: colors.surfaceSecondary,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <MaterialIcons name="group-add" size={18} color={colors.primary} />
+            <Text style={[styles.joinButtonText, { color: colors.primary }]}>Join</Text>
+          </Pressable>
         </View>
         
         <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
@@ -338,8 +352,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
+    marginRight: 8,
   },
   importButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+    includeFontPadding: false,
+  },
+  joinButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  joinButtonText: {
     fontSize: 13,
     fontWeight: '600',
     marginLeft: 6,

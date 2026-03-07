@@ -42,8 +42,9 @@ export interface Message {
 
 export interface Chat {
   id: string;
-  type: 'private' | 'group' | 'channel';
+  type: 'private' | 'group' | 'channel' | 'saved';
   name?: string;
+  username?: string;
   avatar?: string;
   participants: string[];
   admins?: string[];

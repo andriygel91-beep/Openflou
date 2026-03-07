@@ -21,6 +21,7 @@ export default function EditChatScreen() {
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [avatar, setAvatar] = useState<string | undefined>();
@@ -39,6 +40,7 @@ export default function EditChatScreen() {
     if (foundChat) {
       setChat(foundChat);
       setName(foundChat.name || '');
+      setUsername(foundChat.username || '');
       setDescription(foundChat.description || '');
       setAvatar(foundChat.avatar);
       setSelectedMembers(foundChat.participants.filter((p) => p !== currentUser?.id));
@@ -62,6 +64,7 @@ export default function EditChatScreen() {
     const updatedChat: Chat = {
       ...chat,
       name: name.trim(),
+      username: username.trim() || undefined,
       description: description.trim() || undefined,
       avatar,
       participants: [currentUser.id, ...selectedMembers],
@@ -150,6 +153,15 @@ export default function EditChatScreen() {
               placeholderTextColor={colors.textTertiary}
               style={[styles.input, { color: colors.text }]}
               maxLength={50}
+            />
+            <TextInput
+              value={username}
+              onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              placeholder="@username (optional)"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.usernameInput, { color: colors.textSecondary }]}
+              maxLength={32}
+              autoCapitalize="none"
             />
           </View>
         </View>
@@ -287,6 +299,10 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 16,
+    marginBottom: 4,
+  },
+  usernameInput: {
+    fontSize: 14,
   },
   descriptionSection: {
     paddingHorizontal: 16,

@@ -220,6 +220,7 @@ export async function getChats(userId: string): Promise<Chat[]> {
           id: chat.id,
           type: chat.type,
           name: chat.name,
+          username: chat.username,
           avatar: chat.avatar,
           description: chat.description,
           participants: chat.participants,
@@ -246,6 +247,7 @@ export async function createChat(chat: Chat): Promise<{ error: string | null }> 
       id: chat.id,
       type: chat.type,
       name: chat.name,
+      username: chat.username,
       avatar: chat.avatar,
       description: chat.description,
       participants: chat.participants,
@@ -265,6 +267,7 @@ export async function updateChat(chat: Chat): Promise<{ error: string | null }> 
       .from('openflou_chats')
       .update({
         name: chat.name,
+        username: chat.username,
         avatar: chat.avatar,
         description: chat.description,
         participants: chat.participants,
@@ -446,6 +449,84 @@ export async function removeContact(userId: string, contactId: string): Promise<
       .eq('contact_id', contactId);
 
     if (error) throw error;
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+// ==================== SEARCH CHATS BY USERNAME ====================
+
+export async function searchChatByUsername(username: string): Promise<{ chat: Chat | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('openflou_chats')
+      .select('*')
+      .eq('username', username)
+      .in('type', ['group', 'channel'])
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return { chat: null, error: 'Chat not found' };
+      }
+      throw error;
+    }
+
+    const messages = await getMessages(data.id);
+    const lastMessage = messages[messages.length - 1];
+
+    const chat: Chat = {
+      id: data.id,
+      type: data.type,
+      name: data.name,
+      username: data.username,
+      avatar: data.avatar,
+      description: data.description,
+      participants: data.participants,
+      admins: data.admins || [],
+      lastMessage,
+      unreadCount: 0,
+      isPinned: false,
+      isMuted: false,
+      createdAt: new Date(data.created_at),
+    };
+
+    return { chat, error: null };
+  } catch (error: any) {
+    return { chat: null, error: error.message };
+  }
+}
+
+export async function joinChat(chatId: string, userId: string): Promise<{ error: string | null }> {
+  try {
+    // Get current chat
+    const { data, error } = await supabase
+      .from('openflou_chats')
+      .select('*')
+      .eq('id', chatId)
+      .single();
+
+    if (error) throw error;
+
+    // Check if already a participant
+    if (data.participants && data.participants.includes(userId)) {
+      return { error: 'Already a member' };
+    }
+
+    // Add user to participants
+    const newParticipants = [...(data.participants || []), userId];
+
+    const { error: updateError } = await supabase
+      .from('openflou_chats')
+      .update({
+        participants: newParticipants,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', chatId);
+
+    if (updateError) throw updateError;
+
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
