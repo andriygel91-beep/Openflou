@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import * as storage from '@/services/storage';
+import { clearAIMessages } from '@/services/aiStorage';
 
 export default function RootIndex() {
   const { currentUser, setCurrentUser } = useOpenFlou();
@@ -16,6 +17,9 @@ export default function RootIndex() {
 
   async function checkAuth() {
     try {
+      // Clear AI messages on app start
+      await clearAIMessages();
+      
       const authState = await storage.getAuthState();
       
       if (authState?.isAuthenticated && authState.currentUser) {

@@ -236,48 +236,6 @@ export default function PrivacyScreen() {
             </View>
             <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
           </Pressable>
-
-          <Pressable
-            onPress={() => {}}
-            style={({ pressed }) => [
-              styles.privacyItem,
-              {
-                backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
-              },
-            ]}
-          >
-            <View style={styles.privacyLeft}>
-              <MaterialIcons name="lock" size={24} color={colors.icon} />
-              <View style={styles.privacyTextContainer}>
-                <Text style={[styles.privacyTitle, { color: colors.text }]}>Two-Step Verification</Text>
-                <Text style={[styles.privacyDescription, { color: colors.textSecondary }]}>
-                  Add extra security to your account
-                </Text>
-              </View>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => {}}
-            style={({ pressed }) => [
-              styles.privacyItem,
-              {
-                backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
-              },
-            ]}
-          >
-            <View style={styles.privacyLeft}>
-              <MaterialIcons name="vpn-key" size={24} color={colors.icon} />
-              <View style={styles.privacyTextContainer}>
-                <Text style={[styles.privacyTitle, { color: colors.text }]}>Encryption Keys</Text>
-                <Text style={[styles.privacyDescription, { color: colors.textSecondary }]}>
-                  Manage your encryption keys
-                </Text>
-              </View>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
-          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>

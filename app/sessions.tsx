@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
 import { MaterialIcons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
+import * as Device from 'expo-device';
 import * as api from '@/services/api';
 
 interface Session {
@@ -41,7 +41,17 @@ export default function SessionsScreen() {
       return;
     }
     
-    setSessions(data);
+    // Получаем текущее устройство
+    const currentDevice = Device.deviceName || 'Unknown Device';
+    
+    // Сортируем: текущее устройство первое
+    const sorted = data.sort((a, b) => {
+      if (a.device_name === currentDevice) return -1;
+      if (b.device_name === currentDevice) return 1;
+      return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
+    });
+    
+    setSessions(sorted);
   }
 
   async function handleRefresh() {

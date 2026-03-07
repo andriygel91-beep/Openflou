@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidin
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
+import { useAlert } from '@/template';
 import { Avatar, MessageBubble, VoiceRecorder, ReactionPicker } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Message } from '@/types';
@@ -14,7 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colors, t, chats, currentUser, getMessagesForChat, sendMessage, theme, addReaction, removeReaction } = useOpenFlou();
+  const { colors, t, chats, currentUser, getMessagesForChat, sendMessage, updateMessage, theme, addReaction, removeReaction } = useOpenFlou();
+  const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -23,6 +25,8 @@ export default function ChatScreen() {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isRecordingMode, setIsRecordingMode] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editText, setEditText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
   const chat = chats.find((c) => c.id === id);
@@ -137,8 +141,39 @@ export default function ChatScreen() {
   }
 
   function handleMessageLongPress(message: Message) {
-    setSelectedMessage(message);
-    setShowReactionPicker(true);
+    if (message.type === 'text' && message.senderId === currentUser?.id) {
+      // Allow editing only own text messages
+      setEditingMessage(message);
+      setEditText(message.content);
+    } else {
+      setSelectedMessage(message);
+      setShowReactionPicker(true);
+    }
+  }
+
+  async function handleEditSubmit() {
+    if (!editingMessage || !editText.trim() || !id) return;
+    
+    const updatedMessage: Message = {
+      ...editingMessage,
+      content: editText.trim(),
+      isEdited: true,
+    };
+    
+    const { error } = await updateMessage(updatedMessage);
+    if (error) {
+      showAlert(error);
+      return;
+    }
+    
+    await loadMessages();
+    setEditingMessage(null);
+    setEditText('');
+  }
+
+  async function handleEditCancel() {
+    setEditingMessage(null);
+    setEditText('');
   }
 
   async function handleReactionSelect(emoji: string) {
@@ -226,7 +261,35 @@ export default function ChatScreen() {
         />
 
         {/* Input */}
-        {isRecordingMode ? (
+        {editingMessage ? (
+          <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
+            <TextInput
+              value={editText}
+              onChangeText={setEditText}
+              placeholder="Edit message"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceSecondary }]}
+              multiline
+              maxLength={4000}
+              autoFocus
+            />
+            <Pressable onPress={handleEditCancel} style={styles.attachButton}>
+              <MaterialIcons name="close" size={24} color={colors.error} />
+            </Pressable>
+            <Pressable
+              onPress={handleEditSubmit}
+              style={({ pressed }) => [
+                styles.sendButton,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <MaterialIcons name="check" size={20} color={colors.textInverted} />
+            </Pressable>
+          </View>
+        ) : isRecordingMode ? (
           <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
             <VoiceRecorder
               colors={colors}

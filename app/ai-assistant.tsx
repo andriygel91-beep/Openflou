@@ -7,14 +7,10 @@ import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getSupabaseClient } from '@/template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import { saveAIMessages, loadAIMessages, clearAIMessages, AIMessage } from '@/services/aiStorage';
 import { StatusBar } from 'expo-status-bar';
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+interface ChatMessage extends AIMessage {}
 
 export default function AIAssistantScreen() {
   const { colors, t, theme } = useOpenFlou();
@@ -22,16 +18,37 @@ export default function AIAssistantScreen() {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: t.aiWelcome,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Load saved messages on mount
+  useEffect(() => {
+    loadSavedMessages();
+  }, []);
+
+  // Save messages whenever they change
+  useEffect(() => {
+    if (messages.length > 1) {
+      saveAIMessages(messages);
+    }
+  }, [messages]);
+
+  async function loadSavedMessages() {
+    const saved = await loadAIMessages();
+    if (saved.length > 0) {
+      setMessages(saved);
+    } else {
+      setMessages([
+        {
+          id: '1',
+          role: 'assistant',
+          content: t.aiWelcome,
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }
 
   async function handleSend() {
     if (!inputText.trim() || isLoading) return;

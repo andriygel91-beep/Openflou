@@ -1,6 +1,6 @@
 // Openflou Settings Tab
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
@@ -13,6 +13,8 @@ import { StatusBar } from 'expo-status-bar';
 export default function SettingsTab() {
   const { colors, t, theme, setTheme, language, setLanguage, currentUser, setCurrentUser, settings, updateSettings } = useOpenFlou();
   
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+
   const languageNames: Record<string, string> = {
     en: 'English',
     ru: 'Русский',
@@ -30,6 +32,25 @@ export default function SettingsTab() {
     ko: '한국어',
     hi: 'हिन्दी',
   };
+
+  const languages = [
+    { code: 'en', name: 'English' },
+    { code: 'ru', name: 'Русский' },
+    { code: 'uk', name: 'Українська' },
+    { code: 'es', name: 'Español' },
+    { code: 'fr', name: 'Français' },
+    { code: 'de', name: 'Deutsch' },
+    { code: 'it', name: 'Italiano' },
+    { code: 'pt', name: 'Português' },
+    { code: 'pl', name: 'Polski' },
+    { code: 'tr', name: 'Türkçe' },
+    { code: 'ar', name: 'العربية' },
+    { code: 'zh', name: '中文' },
+    { code: 'ja', name: '日本語' },
+    { code: 'ko', name: '한국어' },
+    { code: 'hi', name: 'हिन्दी' },
+  ];
+
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -138,12 +159,7 @@ export default function SettingsTab() {
             icon="language"
             title={t.language}
             value={languageNames[language] || 'English'}
-            onPress={() => {
-              const langs = ['en', 'ru', 'uk', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'tr', 'ar', 'zh', 'ja', 'ko', 'hi'] as const;
-              const currentIndex = langs.indexOf(language);
-              const nextLang = langs[(currentIndex + 1) % langs.length];
-              setLanguage(nextLang as any);
-            }}
+            onPress={() => setShowLanguagePicker(true)}
           />
           
           {!settings.autoTheme && (
@@ -241,6 +257,55 @@ export default function SettingsTab() {
           <Text style={[styles.logoutText, { color: colors.error }]}>{t.logout}</Text>
         </Pressable>
       </ScrollView>
+
+      {/* Language Picker Modal */}
+      <Modal
+        visible={showLanguagePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguagePicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowLanguagePicker(false)}
+        >
+          <View style={[styles.pickerContainer, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.pickerTitle, { color: colors.text }]}>Select Language</Text>
+            <ScrollView style={styles.languageList}>
+              {languages.map((lang) => (
+                <Pressable
+                  key={lang.code}
+                  onPress={() => {
+                    setLanguage(lang.code as any);
+                    setShowLanguagePicker(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.languageItem,
+                    {
+                      backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.languageName,
+                      {
+                        color: language === lang.code ? colors.primary : colors.text,
+                        fontWeight: language === lang.code ? '600' : '400',
+                      },
+                    ]}
+                  >
+                    {lang.name}
+                  </Text>
+                  {language === lang.code && (
+                    <MaterialIcons name="check" size={20} color={colors.primary} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -328,6 +393,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 16,
+    includeFontPadding: false,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerContainer: {
+    width: '80%',
+    maxHeight: '70%',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    padding: 16,
+    includeFontPadding: false,
+  },
+  languageList: {
+    maxHeight: 400,
+  },
+  languageItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  languageName: {
+    fontSize: 16,
     includeFontPadding: false,
   },
 });

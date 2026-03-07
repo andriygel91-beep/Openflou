@@ -31,7 +31,7 @@ export default function CreateGroupScreen() {
 
   async function handleCreate() {
     if (!groupName.trim()) {
-      showAlert('Please enter group name');
+      showAlert(t.fillAllFields || 'Please enter group name');
       return;
     }
 
@@ -54,7 +54,12 @@ export default function CreateGroupScreen() {
       createdAt: new Date(),
     };
 
-    await addChat(newGroup);
+    const { error } = await addChat(newGroup);
+    if (error) {
+      showAlert(error);
+      return;
+    }
+    
     showAlert('Group created');
     router.back();
   }
