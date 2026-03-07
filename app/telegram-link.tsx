@@ -47,6 +47,8 @@ export default function TelegramLinkScreen() {
 
     setChecking(true);
     try {
+      console.log('🔍 Checking verification status for user:', currentUser.id);
+      
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.functions.invoke('telegram-verify', {
         body: {
@@ -56,16 +58,19 @@ export default function TelegramLinkScreen() {
       });
 
       if (error) {
-        console.error('Check verification error:', error);
+        console.error('❌ Check verification error:', error);
         return;
       }
 
-      if (data.verified) {
+      console.log('✅ Check result:', data);
+
+      if (data && data.verified) {
+        console.log('🎉 User verified!');
         showAlert('Success!', 'Your Telegram account is now linked to Openflou!');
         router.back();
       }
     } catch (error: any) {
-      console.error('Check verification exception:', error);
+      console.error('❌ Check verification exception:', error);
     } finally {
       setChecking(false);
     }
