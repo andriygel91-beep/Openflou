@@ -1,4 +1,4 @@
-// Openflou Telegram Link Screen
+// Openflou Telegram Link Screen - Real Bot Integration
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,19 +11,20 @@ import { getSupabaseClient } from '@/template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
 export default function TelegramLinkScreen() {
-  const { colors, t, theme, currentUser, updateUser } = useOpenFlou();
+  const { colors, t, theme, currentUser } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
 
   const [telegramUsername, setTelegramUsername] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
-  const [step, setStep] = useState<'input' | 'verify'>('input');
+  const [step, setStep] = useState<'input' | 'waiting'>('input');
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+  const [checking, setChecking] = useState(false);
 
+  // Timer countdown
   useEffect(() => {
-    if (step === 'verify' && timeLeft > 0) {
+    if (step === 'waiting' && timeLeft > 0) {
       const timer = setInterval(() => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
@@ -31,8 +32,50 @@ export default function TelegramLinkScreen() {
     }
   }, [step, timeLeft]);
 
+  // Auto-check verification status every 2 seconds
+  useEffect(() => {
+    if (step === 'waiting' && timeLeft > 0) {
+      const interval = setInterval(async () => {
+        await checkVerificationStatus();
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [step, timeLeft]);
+
+  async function checkVerificationStatus() {
+    if (!currentUser || checking) return;
+
+    setChecking(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.functions.invoke('telegram-verify', {
+        body: {
+          action: 'check',
+          userId: currentUser.id,
+        },
+      });
+
+      if (error) {
+        console.error('Check verification error:', error);
+        return;
+      }
+
+      if (data.verified) {
+        showAlert('Success!', 'Your Telegram account is now linked to Openflou!');
+        router.back();
+      }
+    } catch (error: any) {
+      console.error('Check verification exception:', error);
+    } finally {
+      setChecking(false);
+    }
+  }
+
   async function handleGenerateCode() {
     if (!telegramUsername.trim() || !currentUser) return;
+
+    // Remove @ if user included it
+    const cleanUsername = telegramUsername.trim().replace('@', '');
 
     setLoading(true);
     try {
@@ -41,7 +84,7 @@ export default function TelegramLinkScreen() {
         body: {
           action: 'generate',
           userId: currentUser.id,
-          telegramUsername: telegramUsername.trim(),
+          telegramUsername: cleanUsername,
         },
       });
 
@@ -57,44 +100,11 @@ export default function TelegramLinkScreen() {
       }
 
       setGeneratedCode(data.code);
-      setStep('verify');
+      setStep('waiting');
       setTimeLeft(300);
+      showAlert('Code Generated', 'Now open Telegram and send this code to @Openfloubot');
     } catch (error: any) {
       showAlert('Error', error.message || 'Failed to generate code');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleVerify() {
-    if (!verificationCode.trim() || !currentUser) return;
-
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.functions.invoke('telegram-verify', {
-        body: {
-          action: 'verify',
-          userId: currentUser.id,
-          verificationCode: verificationCode.trim().toUpperCase(),
-        },
-      });
-
-      if (error) {
-        let errorMessage = error.message;
-        if (error instanceof FunctionsHttpError) {
-          try {
-            const textContent = await error.context?.text();
-            errorMessage = textContent || error.message;
-          } catch {}
-        }
-        throw new Error(errorMessage);
-      }
-
-      showAlert('Success', 'Telegram account linked successfully!');
-      router.back();
-    } catch (error: any) {
-      showAlert('Error', error.message || 'Verification failed');
     } finally {
       setLoading(false);
     }
@@ -158,7 +168,7 @@ export default function TelegramLinkScreen() {
 
             <Text style={[styles.title, { color: colors.text }]}>Link Your Telegram</Text>
             <Text style={[styles.description, { color: colors.textSecondary }]}>
-              Connect your Telegram account for additional security and recovery options.
+              Connect your Telegram account for additional security and account recovery options.
             </Text>
 
             <View style={[styles.inputContainer, { backgroundColor: colors.surface }]}>
@@ -198,55 +208,66 @@ export default function TelegramLinkScreen() {
               <MaterialIcons name="vpn-key" size={48} color={colors.textInverted} />
             </View>
 
-            <Text style={[styles.title, { color: colors.text }]}>Verification Code</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Send Code to Bot</Text>
             <Text style={[styles.description, { color: colors.textSecondary }]}>
-              Enter the verification code shown below in the Openflou Telegram bot (@openfloubot) within {formatTime(timeLeft)}
+              Open Telegram and send this code to @Openfloubot within {formatTime(timeLeft)}
             </Text>
 
             <View style={[styles.codeBox, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
               <Text style={[styles.codeText, { color: colors.primary }]}>{generatedCode}</Text>
             </View>
 
-            <Text style={[styles.instruction, { color: colors.textSecondary }]}>
-              1. Open Telegram and find @openfloubot{'\n'}
-              2. Send the code above{'\n'}
-              3. Enter the confirmation code below
-            </Text>
+            <View style={[styles.instructionBox, { backgroundColor: colors.surface }]}>
+              <View style={styles.instructionStep}>
+                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.stepNumberText, { color: colors.textInverted }]}>1</Text>
+                </View>
+                <Text style={[styles.instructionText, { color: colors.text }]}>
+                  Open Telegram app
+                </Text>
+              </View>
 
-            <View style={[styles.inputContainer, { backgroundColor: colors.surface }]}>
-              <MaterialIcons name="lock" size={20} color={colors.icon} />
-              <TextInput
-                value={verificationCode}
-                onChangeText={setVerificationCode}
-                placeholder="Enter confirmation code"
-                placeholderTextColor={colors.textTertiary}
-                style={[styles.input, { color: colors.text }]}
-                autoCapitalize="characters"
-                maxLength={6}
-              />
+              <View style={styles.instructionStep}>
+                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.stepNumberText, { color: colors.textInverted }]}>2</Text>
+                </View>
+                <Text style={[styles.instructionText, { color: colors.text }]}>
+                  Search for <Text style={{ fontWeight: '700' }}>@Openfloubot</Text>
+                </Text>
+              </View>
+
+              <View style={styles.instructionStep}>
+                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.stepNumberText, { color: colors.textInverted }]}>3</Text>
+                </View>
+                <Text style={[styles.instructionText, { color: colors.text }]}>
+                  Send the code shown above
+                </Text>
+              </View>
+
+              <View style={styles.instructionStep}>
+                <View style={[styles.stepNumber, { backgroundColor: colors.online }]}>
+                  <MaterialIcons name="check" size={16} color={colors.textInverted} />
+                </View>
+                <Text style={[styles.instructionText, { color: colors.text }]}>
+                  Linking will complete automatically
+                </Text>
+              </View>
             </View>
 
-            <Pressable
-              onPress={handleVerify}
-              disabled={!verificationCode.trim() || loading || timeLeft === 0}
-              style={({ pressed }) => [
-                styles.button,
-                {
-                  backgroundColor: verificationCode.trim() && timeLeft > 0 ? colors.primary : colors.surfaceSecondary,
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.textInverted} />
-              ) : (
-                <Text style={[styles.buttonText, { color: colors.textInverted }]}>Verify & Link</Text>
-              )}
-            </Pressable>
+            {checking && (
+              <View style={styles.checkingContainer}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.checkingText, { color: colors.textSecondary }]}>
+                  Waiting for verification...
+                </Text>
+              </View>
+            )}
 
             {timeLeft === 0 && (
               <Pressable onPress={() => setStep('input')} style={styles.retryButton}>
-                <Text style={[styles.retryText, { color: colors.primary }]}>Code expired. Try again</Text>
+                <MaterialIcons name="refresh" size={20} color={colors.primary} />
+                <Text style={[styles.retryText, { color: colors.primary }]}>Code expired. Generate new code</Text>
               </Pressable>
             )}
           </>
@@ -254,6 +275,7 @@ export default function TelegramLinkScreen() {
 
         {currentUser?.telegram_verified && (
           <Pressable onPress={handleUnlink} style={styles.unlinkButton}>
+            <MaterialIcons name="link-off" size={20} color={colors.error} />
             <Text style={[styles.unlinkText, { color: colors.error }]}>Unlink Telegram</Text>
           </Pressable>
         )}
@@ -349,14 +371,51 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     includeFontPadding: false,
   },
-  instruction: {
+  instructionBox: {
+    width: '100%',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  instructionStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  stepNumberText: {
     fontSize: 14,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 15,
     lineHeight: 20,
-    marginBottom: 24,
+    includeFontPadding: false,
+  },
+  checkingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  checkingText: {
+    fontSize: 14,
     includeFontPadding: false,
   },
   retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 12,
+    gap: 8,
   },
   retryText: {
     fontSize: 15,
@@ -364,8 +423,11 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   unlinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 24,
     padding: 12,
+    gap: 8,
   },
   unlinkText: {
     fontSize: 15,
