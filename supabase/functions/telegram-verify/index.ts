@@ -21,10 +21,13 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const path = url.pathname;
 
+    // Parse request body
+    const body = await req.json();
+
     // ==================== TELEGRAM WEBHOOK ====================
-    // Receives messages from Telegram bot
-    if (req.method === 'POST' && !url.searchParams.get('action')) {
-      const update = await req.json();
+    // Receives messages from Telegram bot (has 'message' or 'update_id' field)
+    if (req.method === 'POST' && (body.message || body.update_id)) {
+      const update = body;
       console.log('📨 Telegram webhook update:', JSON.stringify(update));
 
       // Handle incoming message
@@ -161,7 +164,7 @@ Deno.serve(async (req) => {
     }
 
     // ==================== APP API ====================
-    const { action, userId, telegramUsername, verificationCode } = await req.json();
+    const { action, userId, telegramUsername, verificationCode } = body;
 
     // Generate verification code
     if (action === 'generate') {
