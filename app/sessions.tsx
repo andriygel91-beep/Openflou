@@ -67,16 +67,24 @@ export default function SessionsScreen() {
     setRefreshing(false);
   }
 
-  async function handleTerminateSession(sessionId: string) {
-    const { error } = await api.deleteSession(sessionId);
-    
-    if (error) {
-      showAlert('Error terminating session');
+  async function handleTerminateSession(sessionId: string, isCurrentDevice: boolean) {
+    if (isCurrentDevice) {
+      showAlert(
+        'Cannot terminate current device',
+        'You cannot terminate the session you are currently using. Use logout from settings instead.'
+      );
       return;
     }
     
-    showAlert('Session terminated');
-    loadSessions();
+    const { error } = await api.deleteSession(sessionId);
+    
+    if (error) {
+      showAlert('Error', `Failed to terminate session: ${error}`);
+      return;
+    }
+    
+    showAlert('Success', 'Session terminated successfully');
+    await loadSessions();
   }
 
   function formatDate(dateString: string) {
@@ -181,6 +189,11 @@ export default function SessionsScreen() {
                 
                 <Pressable
                   onPress={() => {
+                    if (isCurrentDevice) {
+                      handleTerminateSession(session.id, true);
+                      return;
+                    }
+                    
                     showAlert(
                       'Terminate Session?',
                       'This device will be logged out immediately.',
@@ -189,7 +202,7 @@ export default function SessionsScreen() {
                         {
                           text: 'Terminate',
                           style: 'destructive',
-                          onPress: () => handleTerminateSession(session.id),
+                          onPress: () => handleTerminateSession(session.id, false),
                         },
                       ]
                     );
@@ -221,11 +234,18 @@ export default function SessionsScreen() {
                     text: 'Terminate All',
                     style: 'destructive',
                     onPress: async () => {
-                      for (const session of sessions.slice(1)) {
-                        await api.deleteSession(session.id);
+                      if (!currentUser) return;
+                      
+                      const currentDevice = Device.deviceName || 'Unknown Device';
+                      const { error } = await api.deleteAllOtherSessions(currentUser.id, currentDevice);
+                      
+                      if (error) {
+                        showAlert('Error', `Failed to terminate sessions: ${error}`);
+                        return;
                       }
-                      showAlert('All sessions terminated');
-                      loadSessions();
+                      
+                      showAlert('Success', 'All other sessions terminated');
+                      await loadSessions();
                     },
                   },
                 ]

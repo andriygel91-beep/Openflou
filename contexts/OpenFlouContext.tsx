@@ -355,6 +355,26 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     await updateMessage(message);
   }
 
+  async function logout() {
+    console.log('🚪 Context: Logging out user:', currentUser?.username);
+    
+    if (currentUser) {
+      // Update user status to offline
+      await api.updateUserStatus(currentUser.id, false);
+    }
+    
+    // Clear all state
+    setCurrentUser(null);
+    setChats([]);
+    setContacts([]);
+    
+    // Clear storage
+    await storage.clearCurrentUser();
+    await storage.clearAuthState();
+    
+    console.log('✅ Context: Logout complete');
+  }
+
   return (
     <OpenFlouContext.Provider
       value={{
@@ -384,6 +404,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         updateSettings,
         addReaction,
         removeReaction,
+        logout,
       }}
     >
       {children}

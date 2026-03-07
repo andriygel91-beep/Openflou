@@ -11,7 +11,7 @@ import * as storage from '@/services/storage';
 import { StatusBar } from 'expo-status-bar';
 
 export default function SettingsTab() {
-  const { colors, t, theme, setTheme, language, setLanguage, currentUser, setCurrentUser, settings, updateSettings } = useOpenFlou();
+  const { colors, t, theme, setTheme, language, setLanguage, currentUser, settings, updateSettings, logout } = useOpenFlou();
   
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
@@ -56,13 +56,21 @@ export default function SettingsTab() {
   const insets = useSafeAreaInsets();
 
   async function handleLogout() {
-    if (currentUser) {
-      currentUser.isOnline = false;
-      await storage.saveUser(currentUser);
-    }
-    await storage.clearAuthState();
-    setCurrentUser(null);
-    router.replace('/auth');
+    showAlert(
+      t.logout || 'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: t.logout || 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/auth');
+          },
+        },
+      ]
+    );
   }
 
   const SettingItem = ({

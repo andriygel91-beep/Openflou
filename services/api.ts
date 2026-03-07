@@ -109,14 +109,45 @@ export async function getSessions(userId: string) {
 
 export async function deleteSession(sessionId: string) {
   try {
+    console.log('🗑️ API: Deleting session:', sessionId);
+    
     const { error } = await supabase
       .from('openflou_sessions')
       .delete()
       .eq('id', sessionId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Delete session error:', error);
+      throw error;
+    }
+    
+    console.log('✅ Session deleted successfully');
     return { error: null };
   } catch (error: any) {
+    console.error('❌ Delete session exception:', error);
+    return { error: error.message };
+  }
+}
+
+export async function deleteAllOtherSessions(userId: string, currentDeviceName: string) {
+  try {
+    console.log('🗑️ API: Deleting all other sessions for user:', userId);
+    
+    const { error } = await supabase
+      .from('openflou_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .neq('device_name', currentDeviceName);
+
+    if (error) {
+      console.error('❌ Delete all sessions error:', error);
+      throw error;
+    }
+    
+    console.log('✅ All other sessions deleted');
+    return { error: null };
+  } catch (error: any) {
+    console.error('❌ Delete all sessions exception:', error);
     return { error: error.message };
   }
 }
