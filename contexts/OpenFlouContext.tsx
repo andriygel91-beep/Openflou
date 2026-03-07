@@ -24,14 +24,14 @@ interface OpenFlouContextType {
   // Chats
   chats: Chat[];
   loadChats: () => Promise<void>;
-  addChat: (chat: Chat) => Promise<void>;
-  updateChat: (chat: Chat) => Promise<void>;
+  addChat: (chat: Chat) => Promise<{ error: string | null }>;
+  updateChat: (chat: Chat) => Promise<{ error: string | null }>;
   deleteChat: (chatId: string) => Promise<void>;
   
   // Messages
   getMessagesForChat: (chatId: string) => Promise<Message[]>;
-  sendMessage: (message: Message) => Promise<void>;
-  updateMessage: (message: Message) => Promise<void>;
+  sendMessage: (message: Message) => Promise<{ error: string | null }>;
+  updateMessage: (message: Message) => Promise<{ error: string | null }>;
   deleteMessage: (chatId: string, messageId: string) => Promise<void>;
   
   // Contacts
@@ -181,18 +181,22 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     setChats(loadedChats);
   }
 
-  async function addChat(chat: Chat) {
+  async function addChat(chat: Chat): Promise<{ error: string | null }> {
     const { error } = await api.createChat(chat);
     if (!error) {
       setChats((prev) => [...prev, chat]);
+      // Reload all chats to get updated list
+      await loadChats();
     }
+    return { error };
   }
 
-  async function updateChat(chat: Chat) {
+  async function updateChat(chat: Chat): Promise<{ error: string | null }> {
     const { error } = await api.updateChat(chat);
     if (!error) {
       setChats((prev) => prev.map((c) => (c.id === chat.id ? chat : c)));
     }
+    return { error };
   }
 
   async function deleteChat(chatId: string) {
@@ -206,7 +210,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     return await api.getMessages(chatId);
   }
 
-  async function sendMessage(message: Message) {
+  async function sendMessage(message: Message): Promise<{ error: string | null }> {
     const { error } = await api.sendMessage(message);
     
     if (!error) {
@@ -217,10 +221,11 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         await updateChat(chat);
       }
     }
+    return { error };
   }
 
-  async function updateMessage(message: Message) {
-    await api.updateMessage(message);
+  async function updateMessage(message: Message): Promise<{ error: string | null }> {
+    return await api.updateMessage(message);
   }
 
   async function deleteMessage(chatId: string, messageId: string) {

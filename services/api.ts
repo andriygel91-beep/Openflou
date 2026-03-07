@@ -341,18 +341,16 @@ export async function sendMessage(message: Message): Promise<{ error: string | n
 
 export async function updateMessage(message: Message): Promise<{ error: string | null }> {
   try {
-    const { data, error } = await supabase.functions.invoke('openflou-messages', {
-      body: {
-        action: 'update',
-        messageId: message.id,
-        message: {
-          content: message.content,
-        },
-      },
-    });
+    const { error } = await supabase
+      .from('openflou_messages')
+      .update({
+        content: message.content,
+        is_edited: true,
+        reactions: message.reactions || [],
+      })
+      .eq('id', message.id);
 
     if (error) throw error;
-    if (data.error) throw new Error(data.error);
 
     return { error: null };
   } catch (error: any) {

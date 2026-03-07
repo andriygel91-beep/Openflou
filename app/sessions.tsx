@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
 import { MaterialIcons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import * as Device from 'expo-device';
 import * as api from '@/services/api';
 

@@ -58,7 +58,12 @@ export default function ChatScreen() {
       isEdited: false,
     };
 
-    await sendMessage(newMessage);
+    const { error } = await sendMessage(newMessage);
+    if (error) {
+      showAlert(error);
+      return;
+    }
+    
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -84,7 +89,12 @@ export default function ChatScreen() {
         isEdited: false,
       };
 
-      await sendMessage(newMessage);
+      const { error } = await sendMessage(newMessage);
+      if (error) {
+        showAlert(error);
+        return;
+      }
+      
       setMessages((prev) => [...prev, newMessage]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
@@ -112,7 +122,12 @@ export default function ChatScreen() {
         isEdited: false,
       };
 
-      await sendMessage(newMessage);
+      const { error } = await sendMessage(newMessage);
+      if (error) {
+        showAlert(error);
+        return;
+      }
+      
       setMessages((prev) => [...prev, newMessage]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
@@ -134,7 +149,12 @@ export default function ChatScreen() {
       isEdited: false,
     };
 
-    await sendMessage(newMessage);
+    const { error } = await sendMessage(newMessage);
+    if (error) {
+      showAlert(error);
+      return;
+    }
+    
     setMessages((prev) => [...prev, newMessage]);
     setIsRecordingMode(false);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);

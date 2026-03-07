@@ -55,6 +55,17 @@ export default function ChatsTab() {
     loadChats();
   }, []);
 
+  useEffect(() => {
+    // Auto-refresh chats when screen is focused
+    const interval = setInterval(() => {
+      if (currentUser) {
+        loadChats();
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   const filteredChats = chats.filter((chat) =>
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
