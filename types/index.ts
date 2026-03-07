@@ -1,10 +1,11 @@
 // Openflou Type Definitions
 export type ThemeType = 'light' | 'dark';
-export type Language = 'uk' | 'ru' | 'en';
+export type Language = 'uk' | 'ru' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'pt' | 'pl' | 'tr' | 'ar' | 'zh' | 'ja' | 'ko' | 'hi';
 
 export interface User {
   id: string;
-  username: string;
+  username: string; // Unique, lowercase identifier
+  display_name?: string; // Display name (can be changed)
   password?: string;
   avatar?: string;
   bio?: string;
@@ -14,6 +15,7 @@ export interface User {
   createdAt: Date;
   telegram_username?: string;
   telegram_verified?: boolean;
+  telegram_chat_id?: number;
 }
 
 export interface Reaction {
@@ -59,6 +61,7 @@ export interface Chat {
 export interface Contact {
   userId: string;
   username: string;
+  displayName?: string;
   avatar?: string;
   bio?: string;
   isOnline: boolean;

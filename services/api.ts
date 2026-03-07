@@ -8,10 +8,10 @@ const supabase = getSupabaseClient();
 
 // ==================== AUTH ====================
 
-export async function signUp(username: string, password: string): Promise<{ user: User | null; error: string | null }> {
+export async function signUp(username: string, displayName: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
     const { data, error } = await supabase.functions.invoke('openflou-auth', {
-      body: { action: 'signup', username, password },
+      body: { action: 'signup', username: username.toLowerCase(), displayName, password },
     });
 
     if (error) {
@@ -34,7 +34,7 @@ export async function signUp(username: string, password: string): Promise<{ user
 export async function signIn(username: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
     const { data, error } = await supabase.functions.invoke('openflou-auth', {
-      body: { action: 'signin', username, password },
+      body: { action: 'signin', username: username.toLowerCase(), password },
     });
 
     if (error) {

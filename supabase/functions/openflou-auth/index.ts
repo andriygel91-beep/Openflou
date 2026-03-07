@@ -1,4 +1,4 @@
-// Openflou Authentication Edge Function
+// Openflou Authentication Edge Function - ID-based auth with display names
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
@@ -14,15 +14,15 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { action, username, password, userId } = await req.json();
+    const { action, username, displayName, password, userId, telegramChatId } = await req.json();
 
     // Sign Up
     if (action === 'signup') {
-      // Check if username exists
+      // Check if username exists (case-insensitive)
       const { data: existingUser } = await supabase
         .from('openflou_users')
         .select('id')
-        .eq('username', username)
+        .ilike('username', username)
         .single();
 
       if (existingUser) {
@@ -32,11 +32,12 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create user
+      // Create user (username will be auto-lowercased by trigger)
       const { data: newUser, error } = await supabase
         .from('openflou_users')
         .insert({
-          username,
+          username: username.toLowerCase(), // Explicit lowercase
+          display_name: displayName || username,
           password_hash: password, // In production, use bcrypt
           is_online: true,
         })
@@ -56,18 +57,46 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Sign In
+    // Sign In (by username + password)
     if (action === 'signin') {
       const { data: user, error } = await supabase
         .from('openflou_users')
         .select('*')
-        .eq('username', username)
+        .ilike('username', username)
         .eq('password_hash', password)
         .single();
 
       if (error || !user) {
         return new Response(
           JSON.stringify({ error: 'Invalid credentials' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update online status
+      await supabase
+        .from('openflou_users')
+        .update({ is_online: true, last_seen: new Date().toISOString() })
+        .eq('id', user.id);
+
+      return new Response(
+        JSON.stringify({ user }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Sign In via Telegram (by telegram_chat_id)
+    if (action === 'telegram_signin') {
+      const { data: user, error } = await supabase
+        .from('openflou_users')
+        .select('*')
+        .eq('telegram_chat_id', telegramChatId)
+        .eq('telegram_verified', true)
+        .single();
+
+      if (error || !user) {
+        return new Response(
+          JSON.stringify({ error: 'No verified Telegram account found' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
