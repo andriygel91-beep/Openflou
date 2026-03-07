@@ -20,6 +20,7 @@ interface OpenFlouContextType {
   // User
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
+  updateUser: (user: User) => Promise<void>;
   
   // Chats
   chats: Chat[];
@@ -83,6 +84,19 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
       // Update session activity
       api.updateSessionActivity(currentUser.id);
     }
+  }, [currentUser]);
+
+  // Auto-sync chats every 3 seconds
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    loadChats();
+    
+    const interval = setInterval(() => {
+      loadChats();
+    }, 3000);
+    
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   async function createSavedMessagesChat() {
@@ -161,6 +175,14 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
       await storage.saveCurrentUser(user);
     } else {
       await storage.clearCurrentUser();
+    }
+  }
+
+  async function updateUser(user: User) {
+    const { error } = await api.updateUser(user);
+    if (!error) {
+      setCurrentUser(user);
+      await storage.saveCurrentUser(user);
     }
   }
 
@@ -307,6 +329,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         setLanguage,
         currentUser,
         setCurrentUser: setCurrentUserAndSave,
+        updateUser,
         chats,
         loadChats,
         addChat,

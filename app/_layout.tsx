@@ -81,6 +81,12 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="telegram-link"
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
               name="search-messages"
               options={{
                 animation: 'fade',

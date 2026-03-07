@@ -29,24 +29,30 @@ export default function SessionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadSessions();
-  }, []);
+    if (currentUser) {
+      loadSessions();
+    }
+  }, [currentUser]);
 
   async function loadSessions() {
-    if (!currentUser) return;
-    
-    const { sessions: data, error } = await api.getSessions(currentUser.id);
-    
-    if (error) {
-      showAlert('Error loading sessions');
+    if (!currentUser) {
+      console.log('No current user, cannot load sessions');
       return;
     }
     
-    // Получаем текущее устройство
-    const currentDevice = Device.deviceName || 'Unknown Device';
+    console.log('Loading sessions for user:', currentUser.id);
+    const { sessions: loadedSessions, error } = await api.getSessions(currentUser.id);
     
-    // Сортируем: текущее устройство первое
-    const sorted = data.sort((a, b) => {
+    if (error) {
+      console.error('Session load error:', error);
+      showAlert('Error loading sessions', error);
+      return;
+    }
+    
+    console.log('Loaded sessions:', loadedSessions.length);
+    
+    const currentDevice = Device.deviceName || 'Unknown Device';
+    const sorted = loadedSessions.sort((a, b) => {
       if (a.device_name === currentDevice) return -1;
       if (b.device_name === currentDevice) return 1;
       return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
@@ -98,6 +104,8 @@ export default function SessionsScreen() {
     return 'devices';
   }
 
+  const currentDeviceName = Device.deviceName || 'Unknown Device';
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
@@ -131,66 +139,73 @@ export default function SessionsScreen() {
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No active sessions</Text>
           </View>
         ) : (
-          sessions.map((session, index) => (
-            <View
-              key={session.id}
-              style={[
-                styles.sessionItem,
-                {
-                  backgroundColor: colors.surface,
-                  borderBottomWidth: index === sessions.length - 1 ? 0 : 1,
-                  borderBottomColor: colors.border,
-                },
-              ]}
-            >
-              <View style={styles.sessionLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSecondary }]}>
-                  <MaterialIcons name={getDeviceIcon(session.platform)} size={24} color={colors.primary} />
-                </View>
-                <View style={styles.sessionInfo}>
-                  <Text style={[styles.deviceName, { color: colors.text }]}>
-                    {session.device_name || 'Unknown Device'}
-                  </Text>
-                  <Text style={[styles.deviceType, { color: colors.textSecondary }]}>
-                    {session.device_type || 'Unknown Model'}
-                  </Text>
-                  <View style={styles.sessionMeta}>
-                    <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-                      {session.platform} • {session.ip_address}
-                    </Text>
-                  </View>
-                  <Text style={[styles.lastActive, { color: colors.textTertiary }]}>
-                    Last active: {formatDate(session.last_active)}
-                  </Text>
-                </View>
-              </View>
-              
-              <Pressable
-                onPress={() => {
-                  showAlert(
-                    'Terminate Session?',
-                    'This device will be logged out immediately.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Terminate',
-                        style: 'destructive',
-                        onPress: () => handleTerminateSession(session.id),
-                      },
-                    ]
-                  );
-                }}
-                style={({ pressed }) => [
-                  styles.terminateButton,
+          sessions.map((session, index) => {
+            const isCurrentDevice = session.device_name === currentDeviceName;
+            
+            return (
+              <View
+                key={session.id}
+                style={[
+                  styles.sessionItem,
                   {
-                    backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
+                    backgroundColor: colors.surface,
+                    borderBottomWidth: index === sessions.length - 1 ? 0 : 1,
+                    borderBottomColor: colors.border,
                   },
                 ]}
               >
-                <MaterialIcons name="close" size={20} color={colors.error} />
-              </Pressable>
-            </View>
-          ))
+                <View style={styles.sessionLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSecondary }]}>
+                    <MaterialIcons name={getDeviceIcon(session.platform)} size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.sessionInfo}>
+                    <Text style={[styles.deviceName, { color: colors.text }]}>
+                      {session.device_name || 'Unknown Device'}
+                      {isCurrentDevice && (
+                        <Text style={[styles.currentBadge, { color: colors.online }]}> (This device)</Text>
+                      )}
+                    </Text>
+                    <Text style={[styles.deviceType, { color: colors.textSecondary }]}>
+                      {session.device_type || 'Unknown Model'}
+                    </Text>
+                    <View style={styles.sessionMeta}>
+                      <Text style={[styles.metaText, { color: colors.textTertiary }]}>
+                        {session.platform} • {session.ip_address}
+                      </Text>
+                    </View>
+                    <Text style={[styles.lastActive, { color: colors.textTertiary }]}>
+                      Last active: {formatDate(session.last_active)}
+                    </Text>
+                  </View>
+                </View>
+                
+                <Pressable
+                  onPress={() => {
+                    showAlert(
+                      'Terminate Session?',
+                      'This device will be logged out immediately.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Terminate',
+                          style: 'destructive',
+                          onPress: () => handleTerminateSession(session.id),
+                        },
+                      ]
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.terminateButton,
+                    {
+                      backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
+                    },
+                  ]}
+                >
+                  <MaterialIcons name="close" size={20} color={colors.error} />
+                </Pressable>
+              </View>
+            );
+          })
         )}
 
         {/* Terminate All */}
@@ -303,6 +318,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     includeFontPadding: false,
     marginBottom: 4,
+  },
+  currentBadge: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   deviceType: {
     fontSize: 14,

@@ -217,6 +217,25 @@ export default function PrivacyScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY</Text>
 
           <Pressable
+            onPress={() => router.push('/telegram-link')}
+            style={({ pressed }) => [
+              styles.privacyItem,
+              {
+                backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
+              },
+            ]}
+          >
+            <View style={styles.privacyLeft}>
+              <MaterialIcons name="send" size={24} color={colors.primary} />
+              <View style={styles.privacyTextContainer}>
+                <Text style={[styles.privacyTitle, { color: colors.text }]}>Telegram Account</Text>
+                <Text style={[styles.privacyDescription, { color: colors.textSecondary }]}>Optional recovery method</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
+          </Pressable>
+
+          <Pressable
             onPress={() => router.push('/blocked-users')}
             style={({ pressed }) => [
               styles.privacyItem,

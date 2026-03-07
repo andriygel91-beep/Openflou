@@ -12,6 +12,8 @@ export interface User {
   lastSeen?: Date;
   publicKey?: string;
   createdAt: Date;
+  telegram_username?: string;
+  telegram_verified?: boolean;
 }
 
 export interface Reaction {

@@ -202,10 +202,13 @@ export async function getChats(userId: string): Promise<Chat[]> {
       throw error;
     }
 
-    // Filter chats where user is participant
-    const userChats = (data || []).filter((chat) => 
-      chat.participants && Array.isArray(chat.participants) && chat.participants.includes(userId)
-    );
+    // Filter chats where user is participant (including channels - they don't have participants array)
+    const userChats = (data || []).filter((chat) => {
+      // Channels and saved messages are always visible
+      if (chat.type === 'channel' || chat.type === 'saved') return true;
+      // For groups and private chats, check participants
+      return chat.participants && Array.isArray(chat.participants) && chat.participants.includes(userId);
+    });
 
     // For each chat, get last message
     const chatsWithMessages = await Promise.all(
