@@ -27,15 +27,34 @@ export default function ChatScreen() {
   const [isRecordingMode, setIsRecordingMode] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editText, setEditText] = useState('');
+  const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const chat = chats.find((c) => c.id === id);
+  const isAdmin = chat?.admins?.includes(currentUser?.id || '');
+  const isCreator = chat?.creatorId === currentUser?.id;
+  const canManage = isAdmin || isCreator;
 
+  // Auto-refresh messages every second for real-time updates
   useEffect(() => {
     if (id) {
       loadMessages();
+      const interval = setInterval(() => {
+        loadMessages();
+      }, 1000); // Refresh every 1 second
+      return () => clearInterval(interval);
     }
   }, [id]);
+
+  // Load pinned message
+  useEffect(() => {
+    if (chat?.pinnedMessageId) {
+      const pinned = messages.find((m) => m.id === chat.pinnedMessageId);
+      setPinnedMessage(pinned || null);
+    } else {
+      setPinnedMessage(null);
+    }
+  }, [chat?.pinnedMessageId, messages]);
 
   async function loadMessages() {
     if (!id) return;
@@ -162,12 +181,56 @@ export default function ChatScreen() {
 
   function handleMessageLongPress(message: Message) {
     if (message.type === 'text' && message.senderId === currentUser?.id) {
-      // Allow editing only own text messages
-      setEditingMessage(message);
-      setEditText(message.content);
+      // Show menu for own messages
+      showAlert('Message Actions', '', [
+        { 
+          text: 'Edit', 
+          onPress: () => {
+            setEditingMessage(message);
+            setEditText(message.content);
+          }
+        },
+        canManage && {
+          text: chat?.pinnedMessageId === message.id ? 'Unpin' : 'Pin Message',
+          onPress: () => handlePinMessage(message),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ].filter(Boolean));
     } else {
-      setSelectedMessage(message);
-      setShowReactionPicker(true);
+      // Show menu for other messages
+      if (canManage) {
+        showAlert('Message Actions', '', [
+          {
+            text: chat?.pinnedMessageId === message.id ? 'Unpin' : 'Pin Message',
+            onPress: () => handlePinMessage(message),
+          },
+          { 
+            text: 'React', 
+            onPress: () => {
+              setSelectedMessage(message);
+              setShowReactionPicker(true);
+            }
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      } else {
+        setSelectedMessage(message);
+        setShowReactionPicker(true);
+      }
+    }
+  }
+
+  async function handlePinMessage(message: Message) {
+    if (!chat || !canManage) return;
+
+    const updatedChat = {
+      ...chat,
+      pinnedMessageId: chat.pinnedMessageId === message.id ? undefined : message.id,
+    };
+
+    const { error } = await updateChat(updatedChat);
+    if (error) {
+      showAlert('Error', error);
     }
   }
 
@@ -248,14 +311,43 @@ export default function ChatScreen() {
         <Pressable 
           onPress={() => {
             if (chat.type === 'group' || chat.type === 'channel') {
-              router.push(`/edit-chat?id=${chat.id}`);
+              router.push(`/chat-settings?id=${chat.id}`);
             }
           }}
           style={styles.headerButton}
         >
-          <MaterialIcons name="more-vert" size={24} color={colors.icon} />
+          <MaterialIcons name="info-outline" size={24} color={colors.icon} />
         </Pressable>
       </View>
+
+      {/* Pinned Message */}
+      {pinnedMessage && (
+        <Pressable
+          onPress={() => {
+            const index = messages.findIndex((m) => m.id === pinnedMessage.id);
+            if (index !== -1) {
+              flatListRef.current?.scrollToIndex({ index, animated: true });
+            }
+          }}
+          style={[styles.pinnedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}
+        >
+          <MaterialIcons name="push-pin" size={20} color={colors.primary} />
+          <View style={styles.pinnedContent}>
+            <Text style={[styles.pinnedLabel, { color: colors.primary }]}>Pinned Message</Text>
+            <Text style={[styles.pinnedText, { color: colors.text }]} numberOfLines={1}>
+              {pinnedMessage.content || 'Media'}
+            </Text>
+          </View>
+          {canManage && (
+            <Pressable
+              onPress={() => handlePinMessage(pinnedMessage)}
+              style={styles.unpinButton}
+            >
+              <MaterialIcons name="close" size={20} color={colors.icon} />
+            </Pressable>
+          )}
+        </Pressable>
+      )}
 
       {/* Messages */}
       <KeyboardAvoidingView
@@ -278,6 +370,7 @@ export default function ChatScreen() {
           )}
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onScrollToIndexFailed={() => {}}
         />
 
         {/* Input */}
@@ -436,5 +529,29 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  pinnedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  pinnedContent: {
+    flex: 1,
+  },
+  pinnedLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+    includeFontPadding: false,
+  },
+  pinnedText: {
+    fontSize: 14,
+    includeFontPadding: false,
+  },
+  unpinButton: {
+    padding: 4,
   },
 });

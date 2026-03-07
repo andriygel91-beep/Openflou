@@ -272,6 +272,9 @@ export async function getChats(userId: string): Promise<Chat[]> {
           description: chat.description,
           participants: chat.participants,
           admins: chat.admins || [],
+          creatorId: chat.creator_id,
+          bannedUsers: chat.banned_users || [],
+          pinnedMessageId: chat.pinned_message_id,
           lastMessage,
           unreadCount: 0,
           isPinned: chat.type === 'saved',
@@ -302,6 +305,9 @@ export async function createChat(chat: Chat): Promise<{ error: string | null }> 
       description: chat.description,
       participants: chat.participants,
       admins: chat.admins || [],
+      creator_id: chat.creatorId,
+      banned_users: chat.bannedUsers || [],
+      pinned_message_id: chat.pinnedMessageId,
     }).select();
 
     if (error) {
@@ -328,6 +334,9 @@ export async function updateChat(chat: Chat): Promise<{ error: string | null }> 
         description: chat.description,
         participants: chat.participants,
         admins: chat.admins,
+        creator_id: chat.creatorId,
+        banned_users: chat.bannedUsers,
+        pinned_message_id: chat.pinnedMessageId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', chat.id);
@@ -383,8 +392,32 @@ export async function getMessages(chatId: string): Promise<Message[]> {
   }
 }
 
-export async function sendMessage(message: Message): Promise<{ error: string | null }> {
+export async function sendMessage(chatId: string, message: Message): Promise<{ error: string | null }> {
   try {
+    // Check permissions
+    const { data: chatData, error: chatError } = await supabase
+      .from('openflou_chats')
+      .select('type, admins, creator_id, banned_users')
+      .eq('id', chatId)
+      .single();
+
+    if (chatError) throw chatError;
+
+    // Check if user is banned
+    if (chatData.banned_users && chatData.banned_users.includes(message.senderId)) {
+      return { error: 'You are banned from this chat' };
+    }
+
+    // Channel: only admins and creator can send
+    if (chatData.type === 'channel') {
+      const isAdmin = chatData.admins?.includes(message.senderId);
+      const isCreator = chatData.creator_id === message.senderId;
+      
+      if (!isAdmin && !isCreator) {
+        return { error: 'Only admins can send messages in this channel' };
+      }
+    }
+
     const { data, error } = await supabase.functions.invoke('openflou-messages', {
       body: {
         action: 'send',
@@ -541,6 +574,9 @@ export async function searchChatByUsername(username: string): Promise<{ chat: Ch
       description: data.description,
       participants: data.participants,
       admins: data.admins || [],
+      creatorId: data.creator_id,
+      bannedUsers: data.banned_users || [],
+      pinnedMessageId: data.pinned_message_id,
       lastMessage,
       unreadCount: 0,
       isPinned: false,

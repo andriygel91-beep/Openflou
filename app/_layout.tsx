@@ -105,6 +105,12 @@ export default function RootLayout() {
                 animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
               }}
             />
+            <Stack.Screen
+              name="chat-settings"
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
           </Stack>
         </OpenFlouProvider>
       </SafeAreaProvider>

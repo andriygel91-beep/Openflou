@@ -50,6 +50,8 @@ export default function CreateGroupScreen() {
       username: username.trim() || undefined,
       participants: [currentUser.id, ...selectedMembers],
       admins: [currentUser.id],
+      creatorId: currentUser.id,
+      bannedUsers: [],
       unreadCount: 0,
       isPinned: false,
       isMuted: false,

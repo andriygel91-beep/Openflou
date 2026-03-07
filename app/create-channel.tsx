@@ -35,6 +35,8 @@ export default function CreateChannelScreen() {
       description: description.trim() || undefined,
       participants: [currentUser.id],
       admins: [currentUser.id],
+      creatorId: currentUser.id,
+      bannedUsers: [],
       unreadCount: 0,
       isPinned: false,
       isMuted: false,

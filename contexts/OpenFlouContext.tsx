@@ -270,7 +270,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   }
 
   async function sendMessage(message: Message): Promise<{ error: string | null }> {
-    const { error } = await api.sendMessage(message);
+    const { error } = await api.sendMessage(message.chatId, message);
     
     if (!error) {
       // Update chat's last message

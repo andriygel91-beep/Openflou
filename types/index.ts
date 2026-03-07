@@ -50,6 +50,9 @@ export interface Chat {
   avatar?: string;
   participants: string[];
   admins?: string[];
+  creatorId?: string; // Original creator (can transfer ownership)
+  bannedUsers?: string[]; // Banned user IDs
+  pinnedMessageId?: string; // Pinned message ID
   lastMessage?: Message;
   unreadCount: number;
   isPinned: boolean;
