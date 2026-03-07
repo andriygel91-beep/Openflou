@@ -195,18 +195,29 @@ export default function SettingsTab() {
           />
         </View>
 
+        {/* Privacy & Security */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Privacy & Security</Text>
+          
+          <SettingItem
+            icon="lock"
+            title={t.privacy}
+            onPress={() => router.push('/privacy')}
+          />
+          
+          <SettingItem
+            icon="devices"
+            title={t.activeSessions}
+            onPress={() => router.push('/sessions')}
+          />
+        </View>
+
         {/* Other */}
         <View style={styles.section}>
           <SettingItem
             icon="smart-toy"
             title={t.aiAssistant}
             onPress={() => router.push('/ai-assistant')}
-          />
-          
-          <SettingItem
-            icon="lock"
-            title={t.privacy}
-            onPress={() => router.push('/privacy')}
           />
           
           <SettingItem

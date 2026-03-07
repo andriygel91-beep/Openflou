@@ -5,95 +5,75 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
-import * as storage from '@/services/storage';
-import { generateUserId } from '@/services/encryption';
-import { User } from '@/types';
+import * as api from '@/services/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
 export default function AuthScreen() {
-  const { colors, t, setCurrentUser } = useOpenFlou();
+  const { colors, t, setCurrentUser, theme } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleAuth() {
-    if (!username.trim()) {
-      showAlert(t.usernameRequired);
+  async function handleSignUp() {
+    if (!username.trim() || !password.trim()) {
+      showAlert(t.fillAllFields);
       return;
     }
 
-    if (!password.trim()) {
-      showAlert(t.passwordRequired);
+    if (password !== confirmPassword) {
+      showAlert(t.passwordsDontMatch);
       return;
     }
 
     setLoading(true);
 
-    try {
-      const existingUser = await storage.findUserByUsername(username);
-
-      if (isSignUp) {
-        if (existingUser) {
-          showAlert('Username already exists');
-          setLoading(false);
-          return;
-        }
-
-        // Create new user
-        const newUser: User = {
-          id: generateUserId(username),
-          username: username.trim(),
-          password,
-          isOnline: true,
-          createdAt: new Date(),
-        };
-
-        await storage.saveUser(newUser);
-        await storage.saveAuthState({
-          isAuthenticated: true,
-          currentUser: newUser,
-          isNewUser: true,
-        });
-
-        setCurrentUser(newUser);
-        showAlert(t.accountCreated);
-        router.replace('/(tabs)');
-      } else {
-        // Sign in
-        if (!existingUser || existingUser.password !== password) {
-          showAlert(t.invalidCredentials);
-          setLoading(false);
-          return;
-        }
-
-        existingUser.isOnline = true;
-        await storage.saveUser(existingUser);
-        await storage.saveAuthState({
-          isAuthenticated: true,
-          currentUser: existingUser,
-          isNewUser: false,
-        });
-
-        setCurrentUser(existingUser);
-        router.replace('/(tabs)');
-      }
-    } catch (error) {
-      showAlert('Authentication error');
-      console.error(error);
-    } finally {
+    const { user, error } = await api.signUp(username, password);
+    
+    if (error) {
+      showAlert(error);
       setLoading(false);
+      return;
+    }
+
+    if (user) {
+      setCurrentUser(user);
+      setLoading(false);
+      router.replace('/(tabs)');
+    }
+  }
+
+  async function handleSignIn() {
+    if (!username.trim() || !password.trim()) {
+      showAlert(t.fillAllFields);
+      return;
+    }
+
+    setLoading(true);
+
+    const { user, error } = await api.signIn(username, password);
+    
+    if (error) {
+      showAlert(error);
+      setLoading(false);
+      return;
+    }
+
+    if (user) {
+      setCurrentUser(user);
+      setLoading(false);
+      router.replace('/(tabs)');
     }
   }
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <StatusBar style="auto" />
+      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
@@ -101,8 +81,8 @@ export default function AuthScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <MaterialIcons name="forum" size={64} color={colors.primary} />
-            <Text style={[styles.title, { color: colors.text }]}>{t.authTitle}</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t.authSubtitle}</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Openflou</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Secure P2P Messenger</Text>
           </View>
 
           <View style={styles.form}>
@@ -111,7 +91,7 @@ export default function AuthScreen() {
               <TextInput
                 value={username}
                 onChangeText={setUsername}
-                placeholder={t.enterUsername}
+                placeholder="Username"
                 placeholderTextColor={colors.textTertiary}
                 style={[
                   styles.input,
@@ -123,6 +103,7 @@ export default function AuthScreen() {
                 ]}
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!loading}
               />
             </View>
 
@@ -131,7 +112,7 @@ export default function AuthScreen() {
               <TextInput
                 value={password}
                 onChangeText={setPassword}
-                placeholder={t.enterPassword}
+                placeholder="Password"
                 placeholderTextColor={colors.textTertiary}
                 style={[
                   styles.input,
@@ -143,11 +124,35 @@ export default function AuthScreen() {
                 ]}
                 secureTextEntry
                 autoCapitalize="none"
+                editable={!loading}
               />
             </View>
 
+            {isSignUp && (
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="lock" size={20} color={colors.icon} style={styles.inputIcon} />
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm Password"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[
+                    styles.input,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.surfaceSecondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
+            )}
+
             <Pressable
-              onPress={handleAuth}
+              onPress={isSignUp ? handleSignUp : handleSignIn}
               disabled={loading}
               style={({ pressed }) => [
                 styles.button,
@@ -158,15 +163,22 @@ export default function AuthScreen() {
               ]}
             >
               <Text style={[styles.buttonText, { color: colors.textInverted }]}>
-                {isSignUp ? t.signUp : t.signIn}
+                {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
               </Text>
             </Pressable>
 
-            <Pressable onPress={() => setIsSignUp(!isSignUp)} style={styles.toggleContainer}>
+            <Pressable
+              onPress={() => {
+                setIsSignUp(!isSignUp);
+                setConfirmPassword('');
+              }}
+              style={styles.toggleContainer}
+              disabled={loading}
+            >
               <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
                 {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
                 <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                  {isSignUp ? t.signIn : t.signUp}
+                  {isSignUp ? 'Sign In' : 'Sign Up'}
                 </Text>
               </Text>
             </Pressable>

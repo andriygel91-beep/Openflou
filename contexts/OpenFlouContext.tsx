@@ -1,10 +1,12 @@
-// Openflou Context - Global State Management
+// Openflou Context - Global State with Backend Integration
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { Chat, Message, Contact, User, AppSettings, ThemeType, Language, Reaction } from '@/types';
+import { Chat, Message, Contact, User, AppSettings, ThemeType, Language } from '@/types';
 import * as storage from '@/services/storage';
+import * as api from '@/services/api';
 import { lightColors, darkColors } from '@/constants/theme';
 import { translations } from '@/constants/translations';
 import { Appearance } from 'react-native';
+import { generateChatId } from '@/services/encryption';
 
 interface OpenFlouContextType {
   // Theme & Language
@@ -74,6 +76,40 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     loadUserSession();
   }, []);
 
+  // Create "Saved Messages" chat when user logs in
+  useEffect(() => {
+    if (currentUser) {
+      createSavedMessagesChat();
+      // Update session activity
+      api.updateSessionActivity(currentUser.id);
+    }
+  }, [currentUser]);
+
+  async function createSavedMessagesChat() {
+    if (!currentUser) return;
+    
+    const savedChatId = `saved_${currentUser.id}`;
+    const existingChats = await api.getChats(currentUser.id);
+    const hasSavedChat = existingChats.some((c) => c.id === savedChatId);
+    
+    if (!hasSavedChat) {
+      const savedChat: Chat = {
+        id: savedChatId,
+        type: 'saved',
+        name: t.savedMessages || 'Saved Messages',
+        avatar: currentUser.avatar,
+        participants: [currentUser.id],
+        admins: [currentUser.id],
+        unreadCount: 0,
+        isPinned: true,
+        isMuted: false,
+        createdAt: new Date(),
+      };
+      
+      await api.createChat(savedChat);
+    }
+  }
+
   async function loadUserSession() {
     const savedUser = await storage.getCurrentUser();
     if (savedUser) {
@@ -123,6 +159,8 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     setCurrentUser(user);
     if (user) {
       await storage.saveCurrentUser(user);
+    } else {
+      await storage.clearCurrentUser();
     }
   }
 
@@ -138,67 +176,83 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadChats() {
-    const loadedChats = await storage.getChats();
+    if (!currentUser) return;
+    const loadedChats = await api.getChats(currentUser.id);
     setChats(loadedChats);
   }
 
   async function addChat(chat: Chat) {
-    await storage.saveChat(chat);
-    setChats((prev) => [...prev, chat]);
+    const { error } = await api.createChat(chat);
+    if (!error) {
+      setChats((prev) => [...prev, chat]);
+    }
   }
 
   async function updateChat(chat: Chat) {
-    await storage.saveChat(chat);
-    setChats((prev) => prev.map((c) => (c.id === chat.id ? chat : c)));
+    const { error } = await api.updateChat(chat);
+    if (!error) {
+      setChats((prev) => prev.map((c) => (c.id === chat.id ? chat : c)));
+    }
   }
 
   async function deleteChat(chatId: string) {
-    await storage.deleteChat(chatId);
-    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    const { error } = await api.deleteChat(chatId);
+    if (!error) {
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+    }
   }
 
   async function getMessagesForChat(chatId: string): Promise<Message[]> {
-    return await storage.getMessages(chatId);
+    return await api.getMessages(chatId);
   }
 
   async function sendMessage(message: Message) {
-    await storage.saveMessage(message);
+    const { error } = await api.sendMessage(message);
     
-    // Update chat's last message
-    const chat = chats.find((c) => c.id === message.chatId);
-    if (chat) {
-      chat.lastMessage = message;
-      await updateChat(chat);
+    if (!error) {
+      // Update chat's last message
+      const chat = chats.find((c) => c.id === message.chatId);
+      if (chat) {
+        chat.lastMessage = message;
+        await updateChat(chat);
+      }
     }
   }
 
   async function updateMessage(message: Message) {
-    await storage.updateMessage(message);
+    await api.updateMessage(message);
   }
 
   async function deleteMessage(chatId: string, messageId: string) {
-    await storage.deleteMessage(chatId, messageId);
+    await api.deleteMessage(chatId, messageId);
   }
 
   async function loadContacts() {
-    const loadedContacts = await storage.getContacts();
+    if (!currentUser) return;
+    const loadedContacts = await api.getContacts(currentUser.id);
     setContacts(loadedContacts);
   }
 
   async function addContact(contact: Contact) {
-    await storage.saveContact(contact);
-    setContacts((prev) => [...prev, contact]);
+    if (!currentUser) return;
+    const { error } = await api.addContact(currentUser.id, contact.userId);
+    if (!error) {
+      setContacts((prev) => [...prev, contact]);
+    }
   }
 
   async function deleteContact(userId: string) {
-    await storage.deleteContact(userId);
-    setContacts((prev) => prev.filter((c) => c.userId !== userId));
+    if (!currentUser) return;
+    const { error } = await api.removeContact(currentUser.id, userId);
+    if (!error) {
+      setContacts((prev) => prev.filter((c) => c.userId !== userId));
+    }
   }
 
   async function addReaction(messageId: string, chatId: string, emoji: string) {
     if (!currentUser) return;
     
-    const messages = await storage.getMessages(chatId);
+    const messages = await api.getMessages(chatId);
     const message = messages.find((m) => m.id === messageId);
     if (!message) return;
 
@@ -226,7 +280,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   async function removeReaction(messageId: string, chatId: string, emoji: string) {
     if (!currentUser) return;
     
-    const messages = await storage.getMessages(chatId);
+    const messages = await api.getMessages(chatId);
     const message = messages.find((m) => m.id === messageId);
     if (!message || !message.reactions) return;
 

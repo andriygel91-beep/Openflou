@@ -146,22 +146,22 @@ export default function SplashScreen() {
 
   return (
     <LinearGradient
-      colors={['#0088CC', '#00A0E9', '#40C4FF']}
+      colors={['#1A1F3A', '#2C3E70', '#3A5A9A']}
       style={styles.container}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      {/* Ripple Circles */}
+      {/* Smooth Ripple Circles */}
       <Animated.View style={[styles.circleContainer, circle1AnimatedStyle]}>
-        <View style={[styles.circle, { width: 200, height: 200, borderRadius: 100 }]} />
+        <View style={[styles.circle, { width: 200, height: 200, borderRadius: 100, borderColor: 'rgba(255, 255, 255, 0.3)' }]} />
       </Animated.View>
       
       <Animated.View style={[styles.circleContainer, circle2AnimatedStyle]}>
-        <View style={[styles.circle, { width: 320, height: 320, borderRadius: 160 }]} />
+        <View style={[styles.circle, { width: 320, height: 320, borderRadius: 160, borderColor: 'rgba(255, 255, 255, 0.2)' }]} />
       </Animated.View>
       
       <Animated.View style={[styles.circleContainer, circle3AnimatedStyle]}>
-        <View style={[styles.circle, { width: 440, height: 440, borderRadius: 220 }]} />
+        <View style={[styles.circle, { width: 440, height: 440, borderRadius: 220, borderColor: 'rgba(255, 255, 255, 0.1)' }]} />
       </Animated.View>
 
       {/* Logo */}
@@ -198,8 +198,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   circle: {
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1.5,
     backgroundColor: 'transparent',
   },
   content: {
