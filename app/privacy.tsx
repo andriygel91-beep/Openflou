@@ -217,7 +217,7 @@ export default function PrivacyScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY</Text>
 
           <Pressable
-            onPress={() => {}}
+            onPress={() => router.push('/blocked-users')}
             style={({ pressed }) => [
               styles.privacyItem,
               {

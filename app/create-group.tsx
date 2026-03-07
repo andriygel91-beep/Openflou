@@ -60,8 +60,8 @@ export default function CreateGroupScreen() {
       return;
     }
     
-    showAlert('Group created');
-    router.back();
+    showAlert('Group created successfully');
+    router.replace('/(tabs)');
   }
 
   return (

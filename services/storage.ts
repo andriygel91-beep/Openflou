@@ -161,3 +161,58 @@ export async function getSettings(): Promise<AppSettings> {
         autoThemeMode: 'system',
       };
 }
+
+// ==================== BLOCKED USERS ====================
+
+export async function getBlockedUsers(userId: string): Promise<any[]> {
+  try {
+    const key = `blocked_${userId}`;
+    const data = await AsyncStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    return [];
+  }
+}
+
+export async function blockUser(userId: string, targetUserId: string, targetUsername: string, targetAvatar?: string): Promise<void> {
+  try {
+    const blockedUsers = await getBlockedUsers(userId);
+    
+    if (!blockedUsers.some((u: any) => u.id === targetUserId)) {
+      blockedUsers.push({
+        id: targetUserId,
+        username: targetUsername,
+        avatar: targetAvatar,
+        blockedAt: new Date().toISOString(),
+      });
+      
+      const key = `blocked_${userId}`;
+      await AsyncStorage.setItem(key, JSON.stringify(blockedUsers));
+    }
+  } catch (error) {
+    console.error('Block user error:', error);
+  }
+}
+
+export async function unblockUser(userId: string, targetUserId: string): Promise<void> {
+  try {
+    const blockedUsers = await getBlockedUsers(userId);
+    const filtered = blockedUsers.filter((u: any) => u.id !== targetUserId);
+    
+    const key = `blocked_${userId}`;
+    await AsyncStorage.setItem(key, JSON.stringify(filtered));
+  } catch (error) {
+    console.error('Unblock user error:', error);
+  }
+}
+
+export async function isUserBlocked(userId: string, targetUserId: string): Promise<boolean> {
+  try {
+    const blockedUsers = await getBlockedUsers(userId);
+    return blockedUsers.some((u: any) => u.id === targetUserId);
+  } catch (error) {
+    console.error('Check blocked user error:', error);
+    return false;
+  }
+}

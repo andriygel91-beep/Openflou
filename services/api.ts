@@ -195,14 +195,21 @@ export async function getChats(userId: string): Promise<Chat[]> {
     const { data, error } = await supabase
       .from('openflou_chats')
       .select('*')
-      .contains('participants', [userId])
       .order('updated_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Get chats DB error:', error);
+      throw error;
+    }
+
+    // Filter chats where user is participant
+    const userChats = (data || []).filter((chat) => 
+      chat.participants && Array.isArray(chat.participants) && chat.participants.includes(userId)
+    );
 
     // For each chat, get last message
     const chatsWithMessages = await Promise.all(
-      (data || []).map(async (chat) => {
+      userChats.map(async (chat) => {
         const messages = await getMessages(chat.id);
         const lastMessage = messages[messages.length - 1];
         
@@ -213,10 +220,10 @@ export async function getChats(userId: string): Promise<Chat[]> {
           avatar: chat.avatar,
           description: chat.description,
           participants: chat.participants,
-          admins: chat.admins,
+          admins: chat.admins || [],
           lastMessage,
           unreadCount: 0,
-          isPinned: false,
+          isPinned: chat.type === 'saved',
           isMuted: false,
           createdAt: new Date(chat.created_at),
         };
