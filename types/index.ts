@@ -16,6 +16,10 @@ export interface User {
   telegram_username?: string;
   telegram_verified?: boolean;
   telegram_chat_id?: number;
+  // Signal Protocol E2EE
+  identityPublicKey?: string;
+  identityPrivateKey?: string;
+  registrationId?: number;
 }
 
 export interface Reaction {
@@ -40,6 +44,10 @@ export interface Message {
   isEdited: boolean;
   replyTo?: string;
   reactions?: Reaction[];
+  // E2EE fields
+  iv?: string; // Initialization Vector for AES-GCM
+  // Disappearing messages
+  expiresAt?: Date;
 }
 
 export interface Chat {
@@ -59,6 +67,9 @@ export interface Chat {
   isMuted: boolean;
   createdAt: Date;
   description?: string;
+  // Disappearing messages
+  disappearingMessagesEnabled?: boolean;
+  disappearingMessagesTimer?: number; // seconds
 }
 
 export interface Contact {

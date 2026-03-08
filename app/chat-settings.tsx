@@ -291,7 +291,28 @@ export default function ChatSettingsScreen() {
               ]}
             >
               <MaterialIcons name="edit" size={24} color={colors.icon} />
-              <Text style={[styles.settingText, { color: colors.text }]}>Edit Info</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingText, { color: colors.text }]}>Edit Info</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
+            </Pressable>
+            
+            <Pressable
+              onPress={() => router.push(`/chat-privacy?id=${chat.id}`)}
+              style={({ pressed }) => [
+                styles.settingItem,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <MaterialIcons name="timer" size={24} color={colors.icon} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingText, { color: colors.text }]}>Disappearing Messages</Text>
+                {chat.disappearingMessagesEnabled && (
+                  <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                    Enabled · {chat.disappearingMessagesTimer}s
+                  </Text>
+                )}
+              </View>
               <MaterialIcons name="chevron-right" size={24} color={colors.icon} />
             </Pressable>
           </View>
@@ -535,8 +556,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingText: {
-    flex: 1,
     fontSize: 16,
+    includeFontPadding: false,
+  },
+  settingSubtext: {
+    fontSize: 13,
+    marginTop: 2,
     includeFontPadding: false,
   },
   modalOverlay: {
