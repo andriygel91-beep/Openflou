@@ -1,4 +1,4 @@
-name: Build APK Release (Final Optimization)
+name: Build APK Release (37th Attempt - Fixed Stripe & Timeouts)
 on:
   workflow_dispatch:
 
@@ -31,37 +31,38 @@ jobs:
 
       - name: 🏗 Prebuild Android Directory
         run: |
-          # Сначала генерируем папку android
           npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Optimize Android Project (MultiDex + ABI Filter)
+      - name: 🔧 Fix Network & Gradle (Stripe Fix)
         run: |
-          # Теперь, когда папка android создана, правим файлы
-          FILE="android/app/build.gradle"
+          # 1. Увеличиваем таймауты загрузки, чтобы JitPack не вешал билд
+          echo "systemProp.org.gradle.internal.http.socketTimeout=120000" >> android/gradle.properties
+          echo "systemProp.org.gradle.internal.http.connectionTimeout=120000" >> android/gradle.properties
           
-          # 1. Включаем MultiDex (чтобы не падал DexMerging)
-          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE
+          # 2. Принудительно добавляем MavenCentral (там Stripe качается стабильнее)
+          FILE_ROOT="android/build.gradle"
+          sed -i 's/google()/google()\n        mavenCentral()/' $FILE_ROOT
           
-          # 2. Ограничиваем сборку только архитектурой arm64-v8a для скорости
-          # Ищем блок buildTypes { release { ... } } и вставляем туда фильтр
-          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE
+          # 3. Наши прошлые оптимизации (MultiDex + ARM64)
+          FILE_APP="android/app/build.gradle"
+          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
+          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
 
       - name: 🚀 Build Release APK
         env:
           NODE_ENV: production
           _JAVA_OPTIONS: "-Xmx4g"
         run: |
-          # Создаем базовый конфиг метро
+          # Создаем конфиг метро
           echo "const { getDefaultConfig } = require('expo/metro-config'); module.exports = getDefaultConfig(__dirname);" > metro.config.js
           
           cd android
           chmod +x gradlew
-          # Собираем финальный APK
+          # Собираем только одну архитектуру для скорости
           ./gradlew assembleRelease
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Success-Final
+          name: OpenFlou-Build-37
           path: android/app/build/outputs/apk/release/app-release.apk
-          
