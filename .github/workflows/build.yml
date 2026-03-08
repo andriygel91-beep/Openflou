@@ -1,4 +1,4 @@
-name: Build APK Release (40th Attempt - Global Ext Fix)
+name: Build APK Release (42nd Attempt - Compose Fix)
 on:
   workflow_dispatch:
 
@@ -31,25 +31,23 @@ jobs:
       - name: 🏗 Prebuild Android Directory
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Force Repositories and Fix Expo Variables
+      - name: 🔧 Force Repositories and Fix Compose Compiler
         run: |
-          # 1. Глобальные настройки таймаутов (5 минут ожидания)
+          # 1. Глобальные настройки таймаутов
           echo "systemProp.org.gradle.internal.http.socketTimeout=300000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=300000" >> android/gradle.properties
           
-          # 2. Полная перезапись android/build.gradle с правильной структурой для Gradle 8.13
+          # 2. Перезапись основного build.gradle с плагином Compose Compiler
           cat <<EOF > android/build.gradle
-          // Свойства ДОЛЖНЫ быть на самом верху
-          ext {
-              buildToolsVersion = "35.0.0"
-              minSdkVersion = 24
-              compileSdkVersion = 35
-              targetSdkVersion = 35
-              ndkVersion = "27.0.12077973"
-              kotlinVersion = "1.9.24"
-          }
-
           buildscript {
+              ext {
+                  buildToolsVersion = "35.0.0"
+                  minSdkVersion = 24
+                  compileSdkVersion = 35
+                  targetSdkVersion = 35
+                  ndkVersion = "27.0.12077973"
+                  kotlinVersion = "2.0.0" // Повышаем для совместимости с новым Stripe
+              }
               repositories {
                   google()
                   mavenCentral()
@@ -57,20 +55,22 @@ jobs:
               dependencies {
                   classpath('com.android.tools.build:gradle:8.8.2')
                   classpath('com.facebook.react:react-native-gradle-plugin')
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
+                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0")
+                  // Добавляем плагин компилятора Compose, который требует Stripe
+                  classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.0")
               }
           }
 
           allprojects {
               repositories {
-                  mavenCentral() // Ставим первым, чтобы Stripe качался отсюда
+                  mavenCentral()
                   google()
                   maven { url 'https://www.jitpack.io' }
               }
           }
           EOF
 
-          # 3. Оптимизация приложения (MultiDex + ARM64 ABI Filter)
+          # 3. Оптимизация приложения
           FILE_APP="android/app/build.gradle"
           sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
           sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
@@ -87,6 +87,6 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-40
+          name: OpenFlou-Build-42
           path: android/app/build/outputs/apk/release/app-release.apk
           
