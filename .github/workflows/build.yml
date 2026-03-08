@@ -1,4 +1,4 @@
-name: Build APK Release (43rd Attempt - Strict Repo Isolation)
+name: Build APK Release (44th Attempt - Total JitPack Bypass)
 on:
   workflow_dispatch:
 
@@ -31,14 +31,21 @@ jobs:
       - name: 🏗 Prebuild Android Directory
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Fix Repositories and Force MavenCentral
+      - name: 🔧 Total Repo Overwrite & Stripe Fix
         run: |
-          # 1. Глобальные настройки таймаутов
+          # 1. Глобальные настройки таймаутов (на всякий случай)
           echo "systemProp.org.gradle.internal.http.socketTimeout=600000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=600000" >> android/gradle.properties
+
+          # 2. Фиксируем версию Stripe в самом модуле, чтобы он не лез за обновлениями
+          # Ищем файл в node_modules и меняем динамическую версию на статичную
+          STRIPE_BUILD_GRADLE="node_modules/@stripe/stripe-react-native/android/build.gradle"
+          if [ -f "$STRIPE_BUILD_GRADLE" ]; then
+            sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_BUILD_GRADLE"
+            sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_BUILD_GRADLE"
+          fi
           
-          # 2. Перезапись build.gradle с жесткой фильтрацией репозиториев
-          # Мы явно говорим: Stripe брать из MavenCentral, а JitPack использовать только как запасной вариант
+          # 3. Полная перезапись build.gradle. Убираем JitPack ВООБЩЕ на время этого билда.
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -63,26 +70,15 @@ jobs:
 
           allprojects {
               repositories {
-                  // ПРИОРИТЕТ 1: Официальные репозитории
                   google()
-                  mavenCentral {
-                      content {
-                          includeGroup "com.stripe" // Принудительно ищем Stripe здесь
-                      }
-                  }
-                  // ПРИОРИТЕТ 2: Все остальное
-                  mavenCentral() 
-                  maven { 
-                      url 'https://www.jitpack.io' 
-                      content {
-                          excludeGroup "com.stripe" // ЗАПРЕЩАЕМ искать Stripe на JitPack
-                      }
-                  }
+                  mavenCentral()
+                  // JitPack полностью удален. Если какой-то библиотеке он нужен, 
+                  // она упадет СРАЗУ, а не будет висеть 10 минут.
               }
           }
           EOF
 
-          # 3. Оптимизация приложения
+          # 4. Оптимизация приложения
           FILE_APP="android/app/build.gradle"
           sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
           sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
@@ -99,6 +95,6 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-43
+          name: OpenFlou-Build-44
           path: android/app/build/outputs/apk/release/app-release.apk
           
