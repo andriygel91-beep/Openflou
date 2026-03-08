@@ -1,4 +1,4 @@
-name: Build APK Release (44th Attempt - Hard Repository Lock)
+name: Build APK Release (45th Attempt - Offline Strategy)
 on:
   workflow_dispatch:
 
@@ -28,23 +28,20 @@ jobs:
           pnpm config set shamefully-hoist true
           pnpm install --no-frozen-lockfile
 
-      - name: 🏗 Prebuild Android
+      - name: 🏗 Prebuild Android Directory
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Block JitPack for Stripe and Fix Versions
+      - name: 🔧 Force Fixed Versions (Bypass Down Server)
         run: |
-          # 1. Настройка системных таймаутов (10 минут)
+          # 1. Увеличиваем таймауты до максимума
           echo "systemProp.org.gradle.internal.http.socketTimeout=600000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=600000" >> android/gradle.properties
           
-          # 2. Фиксируем версию Stripe в самом модуле, чтобы убрать динамический поиск (+)
-          STRIPE_GRADLE="node_modules/@stripe/stripe-react-native/android/build.gradle"
-          if [ -f "$STRIPE_GRADLE" ]; then
-            sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_GRADLE"
-            sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_GRADLE"
-          fi
+          # 2. ЖЕСТКО фиксируем версию Stripe во всех модулях (убираем поиск обновлений)
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' {} +
 
-          # 3. Перезапись основного build.gradle с фильтрацией контента
+          # 3. Перезапись build.gradle с удалением упавшего сервера
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -70,18 +67,15 @@ jobs:
           allprojects {
               repositories {
                   google()
-                  mavenCentral {
-                      content {
-                          // Принудительно ищем Stripe только здесь
-                          includeGroup "com.stripe"
-                      }
-                  }
-                  maven { 
-                      url 'https://www.jitpack.io' 
-                      content {
-                          // ЗАПРЕЩАЕМ искать Stripe на JitPack
-                          excludeGroup "com.stripe"
-                          excludeGroup "com.stripe.stripe-android"
+                  mavenCentral()
+                  // Мы НЕ добавляем JitPack сюда вообще, пока он лежит (521)
+              }
+              
+              // Принудительная стратегия разрешения зависимостей
+              configurations.all {
+                  resolutionStrategy.eachDependency { details ->
+                      if (details.requested.group == 'com.stripe' && details.requested.name == 'stripe-android') {
+                          details.useVersion '21.12.0'
                       }
                   }
               }
@@ -105,6 +99,6 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-44
+          name: OpenFlou-Build-45
           path: android/app/build/outputs/apk/release/app-release.apk
           
