@@ -1,4 +1,4 @@
-name: Build APK Release (37th Attempt - Fixed Stripe & Timeouts)
+name: Build APK Release (38th Attempt - Force MavenCentral)
 on:
   workflow_dispatch:
 
@@ -27,23 +27,39 @@ jobs:
         run: |
           pnpm config set shamefully-hoist true
           pnpm install --no-frozen-lockfile
-          pnpm add -D babel-preset-expo
 
-      - name: 🏗 Prebuild Android Directory
-        run: |
-          npx expo prebuild --platform android --no-install
+      - name: 🏗 Prebuild Android
+        run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Fix Network & Gradle (Stripe Fix)
+      - name: 🔧 Force Repositories and Fix Timeouts
         run: |
-          # 1. Увеличиваем таймауты загрузки, чтобы JitPack не вешал билд
-          echo "systemProp.org.gradle.internal.http.socketTimeout=120000" >> android/gradle.properties
-          echo "systemProp.org.gradle.internal.http.connectionTimeout=120000" >> android/gradle.properties
+          # 1. Глобальные настройки таймаутов (5 минут ожидания)
+          echo "systemProp.org.gradle.internal.http.socketTimeout=300000" >> android/gradle.properties
+          echo "systemProp.org.gradle.internal.http.connectionTimeout=300000" >> android/gradle.properties
           
-          # 2. Принудительно добавляем MavenCentral (там Stripe качается стабильнее)
-          FILE_ROOT="android/build.gradle"
-          sed -i 's/google()/google()\n        mavenCentral()/' $FILE_ROOT
-          
-          # 3. Наши прошлые оптимизации (MultiDex + ARM64)
+          # 2. Полная перезапись build.gradle с ПРАВИЛЬНЫМ порядком репозиториев
+          # Мы ставим mavenCentral() ПЕРВЫМ, чтобы Stripe качался оттуда, а не с JitPack
+          cat <<EOF > android/build.gradle
+          allprojects {
+              repositories {
+                  mavenCentral()
+                  google()
+                  maven { url 'https://www.jitpack.io' }
+              }
+          }
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath('com.android.tools.build:gradle:8.8.2')
+                  classpath('com.facebook.react:react-native-gradle-plugin')
+              }
+          }
+          EOF
+
+          # 3. Наши стандартные оптимизации для скорости и стабильности
           FILE_APP="android/app/build.gradle"
           sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
           sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
@@ -53,16 +69,13 @@ jobs:
           NODE_ENV: production
           _JAVA_OPTIONS: "-Xmx4g"
         run: |
-          # Создаем конфиг метро
-          echo "const { getDefaultConfig } = require('expo/metro-config'); module.exports = getDefaultConfig(__dirname);" > metro.config.js
-          
           cd android
           chmod +x gradlew
-          # Собираем только одну архитектуру для скорости
           ./gradlew assembleRelease
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-37
+          name: OpenFlou-Build-38
           path: android/app/build/outputs/apk/release/app-release.apk
+          
