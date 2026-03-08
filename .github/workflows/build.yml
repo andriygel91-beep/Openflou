@@ -1,4 +1,4 @@
-name: Build APK Release (44th Attempt - Total JitPack Bypass)
+name: Build APK Release (44th Attempt - Hard Repository Lock)
 on:
   workflow_dispatch:
 
@@ -28,24 +28,23 @@ jobs:
           pnpm config set shamefully-hoist true
           pnpm install --no-frozen-lockfile
 
-      - name: 🏗 Prebuild Android Directory
+      - name: 🏗 Prebuild Android
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Total Repo Overwrite & Stripe Fix
+      - name: 🔧 Block JitPack for Stripe and Fix Versions
         run: |
-          # 1. Глобальные настройки таймаутов (на всякий случай)
+          # 1. Настройка системных таймаутов (10 минут)
           echo "systemProp.org.gradle.internal.http.socketTimeout=600000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=600000" >> android/gradle.properties
-
-          # 2. Фиксируем версию Stripe в самом модуле, чтобы он не лез за обновлениями
-          # Ищем файл в node_modules и меняем динамическую версию на статичную
-          STRIPE_BUILD_GRADLE="node_modules/@stripe/stripe-react-native/android/build.gradle"
-          if [ -f "$STRIPE_BUILD_GRADLE" ]; then
-            sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_BUILD_GRADLE"
-            sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_BUILD_GRADLE"
-          fi
           
-          # 3. Полная перезапись build.gradle. Убираем JitPack ВООБЩЕ на время этого билда.
+          # 2. Фиксируем версию Stripe в самом модуле, чтобы убрать динамический поиск (+)
+          STRIPE_GRADLE="node_modules/@stripe/stripe-react-native/android/build.gradle"
+          if [ -f "$STRIPE_GRADLE" ]; then
+            sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_GRADLE"
+            sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' "$STRIPE_GRADLE"
+          fi
+
+          # 3. Перезапись основного build.gradle с фильтрацией контента
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -71,9 +70,20 @@ jobs:
           allprojects {
               repositories {
                   google()
-                  mavenCentral()
-                  // JitPack полностью удален. Если какой-то библиотеке он нужен, 
-                  // она упадет СРАЗУ, а не будет висеть 10 минут.
+                  mavenCentral {
+                      content {
+                          // Принудительно ищем Stripe только здесь
+                          includeGroup "com.stripe"
+                      }
+                  }
+                  maven { 
+                      url 'https://www.jitpack.io' 
+                      content {
+                          // ЗАПРЕЩАЕМ искать Stripe на JitPack
+                          excludeGroup "com.stripe"
+                          excludeGroup "com.stripe.stripe-android"
+                      }
+                  }
               }
           }
           EOF
