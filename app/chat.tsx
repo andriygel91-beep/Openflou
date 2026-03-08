@@ -35,13 +35,13 @@ export default function ChatScreen() {
   const isCreator = chat?.creatorId === currentUser?.id;
   const canManage = isAdmin || isCreator;
 
-  // Auto-refresh messages every second for real-time updates
+  // Auto-refresh messages every 500ms for faster updates
   useEffect(() => {
     if (id) {
       loadMessages();
       const interval = setInterval(() => {
         loadMessages();
-      }, 1000); // Refresh every 1 second
+      }, 500); // Refresh every 500ms (2x faster)
       return () => clearInterval(interval);
     }
   }, [id]);
@@ -65,27 +65,48 @@ export default function ChatScreen() {
   async function handleSend() {
     if (!inputText.trim() || !currentUser || !id) return;
 
+    // Check if banned
+    if (chat?.bannedUsers?.includes(currentUser.id)) {
+      showAlert('You are banned from this chat');
+      return;
+    }
+
+    // Check channel permissions
+    if (chat?.type === 'channel') {
+      const isAdmin = chat.admins?.includes(currentUser.id);
+      const isCreator = chat.creatorId === currentUser.id;
+      if (!isAdmin && !isCreator) {
+        showAlert('Only admins can send messages in this channel');
+        return;
+      }
+    }
+
+    const messageText = inputText.trim();
+    setInputText(''); // Clear input immediately for better UX
+
     const newMessage: Message = {
       id: generateMessageId(),
       chatId: id,
       senderId: currentUser.id,
-      content: inputText.trim(),
-      encryptedContent: encryptMessage(inputText.trim()),
+      content: messageText,
+      encryptedContent: encryptMessage(messageText),
       type: 'text',
       timestamp: new Date(),
       isRead: false,
       isEdited: false,
     };
 
+    // Optimistic update - show message immediately
+    setMessages((prev) => [...prev, newMessage]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+    // Send to server in background
     const { error } = await sendMessage(newMessage);
     if (error) {
       showAlert(error);
-      return;
+      // Remove optimistic message on error
+      setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
     }
-    
-    setMessages((prev) => [...prev, newMessage]);
-    setInputText('');
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
   async function handlePickImage() {

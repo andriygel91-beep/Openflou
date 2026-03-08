@@ -36,11 +36,7 @@ export default function CreateGroupScreen() {
       return;
     }
 
-    if (selectedMembers.length === 0) {
-      showAlert('Please select at least one member');
-      return;
-    }
-
+    // Allow creating group with 0 members (admin only)
     if (!currentUser) return;
 
     const newGroup: Chat = {
@@ -80,11 +76,11 @@ export default function CreateGroupScreen() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.createGroup}</Text>
         <Pressable
           onPress={handleCreate}
-          disabled={!groupName.trim() || selectedMembers.length === 0}
+          disabled={!groupName.trim()}
           style={({ pressed }) => [
             styles.createButton,
             {
-              opacity: !groupName.trim() || selectedMembers.length === 0 ? 0.3 : pressed ? 0.7 : 1,
+              opacity: !groupName.trim() ? 0.3 : pressed ? 0.7 : 1,
             },
           ]}
         >

@@ -9,6 +9,7 @@ import { useAlert } from '@/template';
 import { Avatar, EmptyState } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as storage from '@/services/storage';
+import * as api from '@/services/api';
 import { generateChatId } from '@/services/encryption';
 import { Contact, Chat } from '@/types';
 import { StatusBar } from 'expo-status-bar';
@@ -104,30 +105,34 @@ export default function ContactsTab() {
     }
 
     const searchUsers = async () => {
-      const allUsers = await storage.getUsers();
-      const query = searchQuery.toLowerCase();
+      // GLOBAL SEARCH: Search in database via API
+      const { data: users, error } = await api.searchUsersByUsername(searchQuery.toLowerCase());
+      
+      if (error || !users) {
+        console.error('Search error:', error);
+        return;
+      }
       
       const results: SearchResult[] = [];
       
-      for (const user of allUsers) {
+      for (const user of users) {
         if (user.id === currentUser?.id) continue;
         
-        if (user.username.toLowerCase().includes(query)) {
-          const isContact = contacts.some((c) => c.userId === user.id);
-          
-          results.push({
-            user: {
-              userId: user.id,
-              username: user.username,
-              avatar: user.avatar,
-              bio: user.bio,
-              isOnline: user.isOnline,
-              lastSeen: user.lastSeen,
-              addedAt: new Date(),
-            },
-            isContact,
-          });
-        }
+        const isContact = contacts.some((c) => c.userId === user.id);
+        
+        results.push({
+          user: {
+            userId: user.id,
+            username: user.username,
+            displayName: user.display_name,
+            avatar: user.avatar,
+            bio: user.bio,
+            isOnline: user.is_online,
+            lastSeen: user.last_seen ? new Date(user.last_seen) : undefined,
+            addedAt: new Date(),
+          },
+          isContact,
+        });
       }
       
       results.sort((a, b) => {
@@ -139,7 +144,8 @@ export default function ContactsTab() {
       setSearchResults(results);
     };
 
-    searchUsers();
+    const debounce = setTimeout(searchUsers, 300);
+    return () => clearTimeout(debounce);
   }, [searchQuery, contacts]);
 
   const displayList = searchQuery.trim() ? searchResults : contacts.map((c) => ({ user: c, isContact: true }));
@@ -279,8 +285,13 @@ export default function ContactsTab() {
                 <View style={styles.contactInfo}>
                   <View style={styles.nameRow}>
                     <Text style={[styles.contactName, { color: colors.text }]}>
-                      {item.user.username}
+                      {item.user.displayName || item.user.username}
                     </Text>
+                    {item.user.displayName && (
+                      <Text style={[styles.usernameSmall, { color: colors.textTertiary }]}>
+                        @{item.user.username}
+                      </Text>
+                    )}
                     {!item.isContact && (
                       <View style={[styles.badge, { backgroundColor: colors.surfaceSecondary }]}>
                         <Text style={[styles.badgeText, { color: colors.textSecondary }]}>
@@ -422,6 +433,10 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '500',
+    includeFontPadding: false,
+  },
+  usernameSmall: {
+    fontSize: 13,
     includeFontPadding: false,
   },
   contactBio: {

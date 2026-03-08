@@ -275,6 +275,8 @@ export async function getChats(userId: string): Promise<Chat[]> {
           creatorId: chat.creator_id,
           bannedUsers: chat.banned_users || [],
           pinnedMessageId: chat.pinned_message_id,
+          disappearingMessagesEnabled: chat.disappearing_messages_enabled,
+          disappearingMessagesTimer: chat.disappearing_messages_timer,
           lastMessage,
           unreadCount: 0,
           isPinned: chat.type === 'saved',
@@ -325,20 +327,30 @@ export async function createChat(chat: Chat): Promise<{ error: string | null }> 
 
 export async function updateChat(chat: Chat): Promise<{ error: string | null }> {
   try {
+    const updateData: any = {
+      name: chat.name,
+      username: chat.username,
+      avatar: chat.avatar,
+      description: chat.description,
+      participants: chat.participants,
+      admins: chat.admins,
+      creator_id: chat.creatorId,
+      banned_users: chat.bannedUsers,
+      pinned_message_id: chat.pinnedMessageId,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Add disappearing messages fields if they exist
+    if (chat.disappearingMessagesEnabled !== undefined) {
+      updateData.disappearing_messages_enabled = chat.disappearingMessagesEnabled;
+    }
+    if (chat.disappearingMessagesTimer !== undefined) {
+      updateData.disappearing_messages_timer = chat.disappearingMessagesTimer;
+    }
+
     const { error } = await supabase
       .from('openflou_chats')
-      .update({
-        name: chat.name,
-        username: chat.username,
-        avatar: chat.avatar,
-        description: chat.description,
-        participants: chat.participants,
-        admins: chat.admins,
-        creator_id: chat.creatorId,
-        banned_users: chat.bannedUsers,
-        pinned_message_id: chat.pinnedMessageId,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', chat.id);
 
     if (error) throw error;
@@ -546,6 +558,23 @@ export async function removeContact(userId: string, contactId: string): Promise<
 
 // ==================== SEARCH CHATS BY USERNAME ====================
 
+// Global user search
+export async function searchUsersByUsername(query: string): Promise<{ data: any[] | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('openflou_users')
+      .select('*')
+      .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+      .order('username')
+      .limit(50);
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error: any) {
+    return { data: null, error: error.message };
+  }
+}
+
 export async function searchChatByUsername(username: string): Promise<{ chat: Chat | null; error: string | null }> {
   try {
     const { data, error } = await supabase
@@ -577,6 +606,8 @@ export async function searchChatByUsername(username: string): Promise<{ chat: Ch
       creatorId: data.creator_id,
       bannedUsers: data.banned_users || [],
       pinnedMessageId: data.pinned_message_id,
+      disappearingMessagesEnabled: data.disappearing_messages_enabled,
+      disappearingMessagesTimer: data.disappearing_messages_timer,
       lastMessage,
       unreadCount: 0,
       isPinned: false,
