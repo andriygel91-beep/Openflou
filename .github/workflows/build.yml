@@ -1,4 +1,4 @@
-name: Build APK Release (46th Attempt - Full Offline Strategy)
+name: Build APK Release (48th Attempt - No JitPack Strategy)
 on:
   workflow_dispatch:
 
@@ -31,20 +31,18 @@ jobs:
       - name: 🏗 Prebuild Android
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🔧 Force Fix Stripe Dependencies & Bypass JitPack
+      - name: 🔧 Global Offline Repository Patch
         run: |
-          # 1. Максимальные таймауты для сетевых запросов
-          echo "systemProp.org.gradle.internal.http.socketTimeout=600000" >> android/gradle.properties
-          echo "systemProp.org.gradle.internal.http.connectionTimeout=600000" >> android/gradle.properties
+          # 1. Настройка системных свойств для ускорения падения при сетевых ошибках
+          echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
+          echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
           
-          # 2. ЖЕСТКАЯ ЗАМЕНА версий Stripe во всех модулях node_modules
-          # Это предотвращает динамический поиск версий через "+"
-          find node_modules/@stripe/stripe-react-native -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
-          find node_modules/@stripe/stripe-react-native -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:21.12.+/com.stripe:stripe-android:21.12.0/g' {} +
-          find node_modules/@stripe/stripe-react-native -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:+/com.stripe:financial-connections:21.12.0/g' {} +
-          find node_modules/@stripe/stripe-react-native -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:21.12.+/com.stripe:financial-connections:21.12.0/g' {} +
+          # 2. Очистка всех build.gradle от знака "+" для Stripe
+          # Это предотвращает обращение к серверам за "новой" версией
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:+/com.stripe:financial-connections:21.12.0/g' {} +
 
-          # 3. Перезапись build.gradle БЕЗ JITPACK
+          # 3. Полная перезапись build.gradle БЕЗ JITPACK
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -71,15 +69,19 @@ jobs:
               repositories {
                   google()
                   mavenCentral()
-                  // JitPack полностью удален, так как сервер 521 (Down)
+                  // JitPack полностью удален. Если он понадобится другой библиотеке, 
+                  // мы увидим ошибку мгновенно, а не через 10 минут.
               }
               
-              // Принудительно фиксируем версии для группы com.stripe
               configurations.all {
-                  resolutionStrategy.eachDependency { details ->
-                      if (details.requested.group == 'com.stripe') {
-                          details.useVersion '21.12.0'
-                      }
+                  resolutionStrategy {
+                      // Принудительно используем стабильную версию для основных проблемных модулей
+                      force 'com.stripe:stripe-android:21.12.0'
+                      force 'com.stripe:financial-connections:21.12.0'
+                      
+                      // Не даем динамическим версиям провоцировать сетевые запросы
+                      cacheDynamicVersionsFor 0, 'seconds'
+                      cacheChangingModulesFor 0, 'seconds'
                   }
               }
           }
@@ -102,6 +104,6 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-46
+          name: OpenFlou-Build-48
           path: android/app/build/outputs/apk/release/app-release.apk
           
