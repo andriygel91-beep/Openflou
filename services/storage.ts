@@ -162,6 +162,20 @@ export async function getSettings(): Promise<AppSettings> {
       };
 }
 
+// ==================== SESSION ID ====================
+
+export async function saveSessionId(sessionId: string): Promise<void> {
+  await AsyncStorage.setItem('@openflou_session_id', sessionId);
+}
+
+export async function getSessionId(): Promise<string | null> {
+  return AsyncStorage.getItem('@openflou_session_id');
+}
+
+export async function clearSessionId(): Promise<void> {
+  await AsyncStorage.removeItem('@openflou_session_id');
+}
+
 // ==================== BLOCKED USERS ====================
 
 export async function getBlockedUsers(userId: string): Promise<any[]> {

@@ -1,4 +1,4 @@
-// Openflou Premium Splash Screen - Particle Animation
+// Openflou Splash Screen - Wave Animation
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
@@ -10,67 +10,61 @@ import Animated, {
   withSequence,
   withRepeat,
   Easing,
+  interpolate,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 
 const { width, height } = Dimensions.get('window');
-const PARTICLES = Array.from({ length: 20 }, (_, i) => i);
 
-// Particle component
-function Particle({ index, colors }: { index: number; colors: any }) {
-  const size = Math.random() * 4 + 2;
-  const startX = Math.random() * width;
-  const startY = Math.random() * height;
-  
-  const translateX = useSharedValue(startX);
-  const translateY = useSharedValue(startY);
+// Animated ring component
+function Ring({ delay, size, color }: { delay: number; size: number; color: string }) {
+  const scale = useSharedValue(0.3);
   const opacity = useSharedValue(0);
-  const scale = useSharedValue(0);
 
   useEffect(() => {
-    const delay = Math.random() * 800;
-    const endX = startX + (Math.random() - 0.5) * 200;
-    const endY = startY - Math.random() * 400 - 200;
-    
-    opacity.value = withDelay(delay, withTiming(1, { duration: 600 }));
-    scale.value = withDelay(delay, withSpring(1, { damping: 10 }));
-    
-    translateX.value = withDelay(
-      delay + 400,
-      withTiming(endX, { duration: 2000, easing: Easing.out(Easing.cubic) })
+    opacity.value = withDelay(delay, withTiming(0.6, { duration: 400 }));
+    scale.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 2000, easing: Easing.out(Easing.cubic) }),
+          withTiming(0.3, { duration: 0 })
+        ),
+        -1
+      )
     );
-    translateY.value = withDelay(
-      delay + 400,
-      withTiming(endY, { duration: 2000, easing: Easing.out(Easing.quad) })
-    );
-    
     opacity.value = withDelay(
-      delay + 1800,
-      withTiming(0, { duration: 600 })
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(0.5, { duration: 400 }),
+          withTiming(0, { duration: 1600, easing: Easing.out(Easing.quad) }),
+          withTiming(0, { duration: 0 })
+        ),
+        -1
+      )
     );
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
   return (
     <Animated.View
       style={[
-        styles.particle,
         {
+          position: 'absolute',
           width: size,
           height: size,
-          backgroundColor: colors.primary,
+          borderRadius: size / 2,
+          borderWidth: 1.5,
+          borderColor: color,
         },
-        animatedStyle,
+        style,
       ]}
     />
   );
@@ -79,160 +73,137 @@ function Particle({ index, colors }: { index: number; colors: any }) {
 export default function SplashScreen() {
   const router = useRouter();
 
-  // Logo animation
   const logoScale = useSharedValue(0);
   const logoOpacity = useSharedValue(0);
-  const logoRotate = useSharedValue(-180);
-  const logoGlow = useSharedValue(0);
-
-  // Text animations
   const textOpacity = useSharedValue(0);
-  const textScale = useSharedValue(0.5);
-  const textLetterSpacing = useSharedValue(20);
+  const textY = useSharedValue(20);
   const taglineOpacity = useSharedValue(0);
-  const taglineY = useSharedValue(30);
-  
-  // Background pulse
-  const bgPulse = useSharedValue(1);
+  const dotsProgress = useSharedValue(0);
+  const gradientShift = useSharedValue(0);
 
   useEffect(() => {
     startAnimation();
   }, []);
 
   function startAnimation() {
-    // Background pulse
-    bgPulse.value = withRepeat(
+    // Background gradient animation
+    gradientShift.value = withRepeat(
       withSequence(
-        withTiming(1.03, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
       ),
       -1
     );
 
-    // Logo rotation + scale + glow
-    logoOpacity.value = withDelay(300, withTiming(1, { duration: 800 }));
+    // Logo pop
+    logoOpacity.value = withDelay(400, withTiming(1, { duration: 500 }));
     logoScale.value = withDelay(
-      300,
-      withSpring(1, {
-        damping: 12,
-        stiffness: 100,
-      })
+      400,
+      withSpring(1, { damping: 10, stiffness: 120 })
     );
-    logoRotate.value = withDelay(
-      300,
-      withSpring(0, {
-        damping: 15,
-        stiffness: 80,
-      })
+
+    // App name slide up
+    textOpacity.value = withDelay(900, withTiming(1, { duration: 500 }));
+    textY.value = withDelay(
+      900,
+      withSpring(0, { damping: 14, stiffness: 100 })
     );
-    logoGlow.value = withDelay(
-      600,
-      withSequence(
-        withTiming(1, { duration: 600 }),
-        withRepeat(
-          withSequence(
-            withTiming(0.7, { duration: 1000 }),
-            withTiming(1, { duration: 1000 })
-          ),
-          3
-        )
+
+    // Tagline fade
+    taglineOpacity.value = withDelay(1400, withTiming(1, { duration: 600 }));
+
+    // Loading dots
+    dotsProgress.value = withDelay(
+      1600,
+      withRepeat(
+        withTiming(3, { duration: 900, easing: Easing.linear }),
+        -1
       )
     );
 
-    // Text with letter spacing effect
-    textOpacity.value = withDelay(1000, withTiming(1, { duration: 600 }));
-    textScale.value = withDelay(
-      1000,
-      withSpring(1, { damping: 12, stiffness: 120 })
-    );
-    textLetterSpacing.value = withDelay(
-      1000,
-      withTiming(3, { duration: 800, easing: Easing.out(Easing.exp) })
-    );
-
-    // Tagline
-    taglineOpacity.value = withDelay(1500, withTiming(1, { duration: 600 }));
-    taglineY.value = withDelay(
-      1500,
-      withSpring(0, { damping: 15, stiffness: 120 })
-    );
-
-    // Navigate
-    setTimeout(() => router.replace('/auth'), 3200);
+    setTimeout(() => router.replace('/auth'), 3000);
   }
 
-  const bgStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: bgPulse.value }],
-  }));
-
   const logoStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: logoScale.value },
-      { rotate: `${logoRotate.value}deg` },
-    ],
+    transform: [{ scale: logoScale.value }],
     opacity: logoOpacity.value,
   }));
 
-  const logoGlowStyle = useAnimatedStyle(() => ({
-    shadowOpacity: 0.6 * logoGlow.value,
-    shadowRadius: 40 * logoGlow.value,
-  }));
-
   const textStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: textScale.value }],
+    transform: [{ translateY: textY.value }],
     opacity: textOpacity.value,
-    letterSpacing: textLetterSpacing.value,
   }));
 
   const taglineStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: taglineY.value }],
     opacity: taglineOpacity.value,
   }));
 
-  const particleColors = {
-    primary: '#64B4FF',
-  };
+  const dot1Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dotsProgress.value, [0, 0.5, 1, 1.5], [0.3, 1, 0.3, 0.3]),
+    transform: [{ scale: interpolate(dotsProgress.value, [0, 0.5, 1, 1.5], [0.8, 1.2, 0.8, 0.8]) }],
+  }));
+
+  const dot2Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dotsProgress.value, [0.5, 1, 1.5, 2], [0.3, 1, 0.3, 0.3]),
+    transform: [{ scale: interpolate(dotsProgress.value, [0.5, 1, 1.5, 2], [0.8, 1.2, 0.8, 0.8]) }],
+  }));
+
+  const dot3Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dotsProgress.value, [1, 1.5, 2, 2.5], [0.3, 1, 0.3, 0.3]),
+    transform: [{ scale: interpolate(dotsProgress.value, [1, 1.5, 2, 2.5], [0.8, 1.2, 0.8, 0.8]) }],
+  }));
 
   return (
-    <Animated.View style={[styles.container, bgStyle]}>
+    <View style={styles.container}>
       <LinearGradient
-        colors={['#0D0D2B', '#1A1A3E', '#252556']}
+        colors={['#080818', '#12124A', '#0E2A5C']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      
-      {/* Floating particles */}
-      {PARTICLES.map((i) => (
-        <Particle key={i} index={i} colors={particleColors} />
-      ))}
 
-      {/* Content */}
-      <View style={styles.content}>
-        <Animated.View style={[logoStyle, logoGlowStyle, styles.logoContainer]}>
+      {/* Ripple rings centered on logo */}
+      <View style={styles.ringsContainer}>
+        <Ring delay={0} size={160} color="rgba(100, 160, 255, 0.6)" />
+        <Ring delay={600} size={260} color="rgba(100, 160, 255, 0.4)" />
+        <Ring delay={1200} size={360} color="rgba(100, 160, 255, 0.25)" />
+        <Ring delay={1800} size={460} color="rgba(100, 160, 255, 0.15)" />
+      </View>
+
+      {/* Logo */}
+      <Animated.View style={[styles.logoWrapper, logoStyle]}>
+        <View style={styles.logoGlow}>
           <Image
             source={require('@/assets/images/logo.png')}
             style={styles.logo}
             contentFit="contain"
-            transition={200}
           />
-        </Animated.View>
+        </View>
+      </Animated.View>
 
-        <Animated.Text style={[styles.appName, textStyle]}>
-          Openflou
-        </Animated.Text>
+      {/* App name */}
+      <Animated.Text style={[styles.appName, textStyle]}>
+        Openflou
+      </Animated.Text>
 
-        <Animated.View style={taglineStyle}>
-          <Text style={styles.tagline}>Private · Secure · Free</Text>
-        </Animated.View>
+      {/* Tagline */}
+      <Animated.View style={[styles.taglineRow, taglineStyle]}>
+        <Text style={styles.tagline}>Private · Secure · Free</Text>
+      </Animated.View>
+
+      {/* Loading dots */}
+      <View style={styles.dotsContainer}>
+        <Animated.View style={[styles.dot, dot1Style]} />
+        <Animated.View style={[styles.dot, dot2Style]} />
+        <Animated.View style={[styles.dot, dot3Style]} />
       </View>
 
-      {/* Gradient bottom overlay */}
+      {/* Bottom gradient */}
       <LinearGradient
-        colors={['transparent', 'rgba(13, 13, 43, 0.8)']}
+        colors={['transparent', 'rgba(8, 8, 24, 0.7)']}
         style={styles.bottomGradient}
       />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -242,54 +213,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  particle: {
+  ringsContainer: {
     position: 'absolute',
-    borderRadius: 100,
-    shadowColor: '#64B4FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  content: {
+    justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
+    width: '100%',
+    height: '100%',
   },
-  logoContainer: {
-    shadowColor: '#64B4FF',
+  logoWrapper: {
+    marginBottom: 32,
+  },
+  logoGlow: {
+    shadowColor: '#4A90F0',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 40,
-    elevation: 25,
+    shadowOpacity: 0.9,
+    shadowRadius: 30,
+    elevation: 20,
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
   },
   appName: {
-    fontSize: 56,
-    fontWeight: '900',
+    fontSize: 48,
+    fontWeight: '800',
     color: '#FFFFFF',
     includeFontPadding: false,
-    marginTop: 28,
-    textShadowColor: 'rgba(100, 180, 255, 0.5)',
-    textShadowOffset: { width: 0, height: 8 },
-    textShadowRadius: 20,
+    letterSpacing: 2,
+    textShadowColor: 'rgba(74, 144, 240, 0.6)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 16,
+  },
+  taglineRow: {
+    marginTop: 12,
   },
   tagline: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(100, 180, 255, 0.9)',
-    marginTop: 12,
-    includeFontPadding: false,
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(150, 190, 255, 0.85)',
     letterSpacing: 3,
     textTransform: 'uppercase',
+    includeFontPadding: false,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 64,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4A90F0',
   },
   bottomGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 150,
+    height: 120,
   },
 });

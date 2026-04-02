@@ -9,8 +9,9 @@ import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
 import { Avatar } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as storage from '@/services/storage';
 import { Chat } from '@/types';
+import * as api from '@/services/api';
+import { getSupabaseClient } from '@/template';
 import { StatusBar } from 'expo-status-bar';
 
 export default function EditChatScreen() {
@@ -32,10 +33,30 @@ export default function EditChatScreen() {
   }, [id]);
 
   async function loadChat() {
-    if (!id) return;
+    if (!id || !currentUser) return;
     
-    const chats = await storage.getChats();
-    const foundChat = chats.find((c) => c.id === id);
+    const { data: chatData } = await getSupabaseClient()
+      .from('openflou_chats')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    const foundChat = chatData ? {
+      id: chatData.id,
+      type: chatData.type,
+      name: chatData.name,
+      username: chatData.username,
+      avatar: chatData.avatar,
+      description: chatData.description,
+      participants: chatData.participants || [],
+      admins: chatData.admins || [],
+      creatorId: chatData.creator_id,
+      bannedUsers: chatData.banned_users || [],
+      unreadCount: 0,
+      isPinned: false,
+      isMuted: false,
+      createdAt: new Date(chatData.created_at),
+    } as Chat : null;
     
     if (foundChat) {
       setChat(foundChat);
@@ -61,16 +82,48 @@ export default function EditChatScreen() {
 
     if (!chat || !currentUser) return;
 
+    let finalAvatar = avatar;
+    // Upload avatar if it's a local file
+    if (avatar && avatar.startsWith('file://')) {
+      try {
+        const supabase = getSupabaseClient();
+        const ext = avatar.split('.').pop() || 'jpg';
+        const path = `avatars/chat_${chat.id}_${Date.now()}.${ext}`;
+        const response = await fetch(avatar);
+        const blob = await response.blob();
+        const ab = await new Promise<ArrayBuffer>((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result as ArrayBuffer);
+          fr.onerror = rej;
+          fr.readAsArrayBuffer(blob);
+        });
+        const { error: upErr } = await supabase.storage.from('openflou-media').upload(path, ab, {
+          contentType: `image/${ext}`,
+          upsert: true,
+        });
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from('openflou-media').getPublicUrl(path);
+          finalAvatar = urlData.publicUrl;
+        }
+      } catch (e) {
+        console.error('Avatar upload failed:', e);
+      }
+    }
+
     const updatedChat: Chat = {
       ...chat,
       name: name.trim(),
       username: username.trim() || undefined,
       description: description.trim() || undefined,
-      avatar,
+      avatar: finalAvatar,
       participants: [currentUser.id, ...selectedMembers],
     };
 
-    await updateChat(updatedChat);
+    const { error } = await updateChat(updatedChat);
+    if (error) {
+      showAlert('Error', error);
+      return;
+    }
     showAlert(chat.type === 'channel' ? 'Channel updated' : 'Group updated');
     router.back();
   }
@@ -128,6 +181,7 @@ export default function EditChatScreen() {
                 quality: 0.8,
               });
               if (!result.canceled && result.assets[0]) {
+                // Store local URI temporarily; it will be uploaded on save
                 setAvatar(result.assets[0].uri);
               }
             }}

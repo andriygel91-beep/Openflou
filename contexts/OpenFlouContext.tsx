@@ -47,6 +47,7 @@ interface OpenFlouContextType {
   // Reactions
   addReaction: (messageId: string, chatId: string, emoji: string) => Promise<void>;
   removeReaction: (messageId: string, chatId: string, emoji: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 export const OpenFlouContext = createContext<OpenFlouContextType | undefined>(undefined);
@@ -81,6 +82,18 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     if (currentUser) {
       createSavedMessagesChat();
       api.updateSessionActivity(currentUser.id);
+      // Validate session every 30s — if session was deleted from another device, log out
+      const sessionCheck = setInterval(async () => {
+        const sessionId = await storage.getSessionId();
+        if (sessionId) {
+          const isValid = await api.checkSessionExists(currentUser.id, sessionId);
+          if (!isValid) {
+            console.log('Session invalidated remotely, logging out');
+            await logout();
+          }
+        }
+      }, 30000);
+      return () => clearInterval(sessionCheck);
     }
   }, [currentUser?.id]);
 
@@ -371,6 +384,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     // Clear storage
     await storage.clearCurrentUser();
     await storage.clearAuthState();
+    await storage.clearSessionId();
     
     console.log('✅ Context: Logout complete');
   }

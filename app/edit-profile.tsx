@@ -1,15 +1,55 @@
-// Openflou Edit Profile Screen
+// Openflou Edit Profile Screen - with server-side update
 import React, { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
 import { Avatar } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as api from '@/services/api';
 import * as storage from '@/services/storage';
+import { getSupabaseClient } from '@/template';
 import { StatusBar } from 'expo-status-bar';
+
+async function uploadAvatar(uri: string, userId: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseClient();
+    const ext = uri.split('.').pop() || 'jpg';
+    const path = `avatars/${userId}_${Date.now()}.${ext}`;
+
+    // Read as base64
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const reader = new FileReader();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+
+    const { error } = await supabase.storage
+      .from('openflou-media')
+      .upload(path, bytes, {
+        contentType: `image/${ext}`,
+        upsert: true,
+      });
+
+    if (error) throw error;
+
+    const { data: urlData } = supabase.storage.from('openflou-media').getPublicUrl(path);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    return null;
+  }
+}
 
 export default function EditProfileScreen() {
   const { colors, t, currentUser, setCurrentUser, theme } = useOpenFlou();
@@ -17,8 +57,10 @@ export default function EditProfileScreen() {
   const router = useRouter();
 
   const [username, setUsername] = useState(currentUser?.username || '');
+  const [displayName, setDisplayName] = useState(currentUser?.display_name || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
-  const [avatar, setAvatar] = useState(currentUser?.avatar);
+  const [avatarUri, setAvatarUri] = useState(currentUser?.avatar);
+  const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     if (!username.trim()) {
@@ -27,31 +69,43 @@ export default function EditProfileScreen() {
     }
 
     if (!currentUser) return;
+    setSaving(true);
 
-    // Check if username is already taken
-    if (username !== currentUser.username) {
-      const allUsers = await storage.getUsers();
-      const usernameTaken = allUsers.some(
-        (u) => u.username === username && u.id !== currentUser.id
-      );
-      
-      if (usernameTaken) {
-        showAlert('Username is already taken');
+    try {
+      let finalAvatar = avatarUri;
+
+      // If avatar is a local file URI, upload it first
+      if (avatarUri && avatarUri.startsWith('file://')) {
+        const uploaded = await uploadAvatar(avatarUri, currentUser.id);
+        if (uploaded) {
+          finalAvatar = uploaded;
+        } else {
+          showAlert('Failed to upload photo, keeping existing avatar');
+          finalAvatar = currentUser.avatar;
+        }
+      }
+
+      const updatedUser = {
+        ...currentUser,
+        username: username.trim().toLowerCase(),
+        display_name: displayName.trim() || username.trim(),
+        bio: bio.trim() || undefined,
+        avatar: finalAvatar,
+      };
+
+      const { error } = await api.updateUser(updatedUser);
+      if (error) {
+        showAlert('Error', error);
         return;
       }
+
+      setCurrentUser(updatedUser);
+      await storage.saveCurrentUser(updatedUser);
+      showAlert('Profile updated');
+      router.back();
+    } finally {
+      setSaving(false);
     }
-
-    const updatedUser = {
-      ...currentUser,
-      username: username.trim(),
-      bio: bio.trim() || undefined,
-      avatar,
-    };
-
-    await storage.saveUser(updatedUser);
-    setCurrentUser(updatedUser);
-    showAlert('Profile updated');
-    router.back();
   }
 
   return (
@@ -66,22 +120,24 @@ export default function EditProfileScreen() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.editProfile}</Text>
         <Pressable
           onPress={handleSave}
-          disabled={!username.trim()}
+          disabled={!username.trim() || saving}
           style={({ pressed }) => [
             styles.saveButton,
-            {
-              opacity: !username.trim() ? 0.3 : pressed ? 0.7 : 1,
-            },
+            { opacity: (!username.trim() || saving) ? 0.3 : pressed ? 0.7 : 1 },
           ]}
         >
-          <MaterialIcons name="check" size={24} color={colors.primary} />
+          {saving ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <MaterialIcons name="check" size={24} color={colors.primary} />
+          )}
         </Pressable>
       </View>
 
       <ScrollView>
         {/* Avatar Section */}
         <View style={[styles.avatarSection, { backgroundColor: colors.surface }]}>
-          <Avatar uri={avatar} username={username || currentUser?.username} size={80} colors={colors} />
+          <Avatar uri={avatarUri} username={username || currentUser?.username} size={80} colors={colors} />
           <Pressable
             onPress={async () => {
               const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -96,18 +152,26 @@ export default function EditProfileScreen() {
                 quality: 0.8,
               });
               if (!result.canceled && result.assets[0]) {
-                setAvatar(result.assets[0].uri);
+                setAvatarUri(result.assets[0].uri);
               }
             }}
-            style={({ pressed }) => [
-              styles.changePhotoButton,
-              {
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
+            style={({ pressed }) => [styles.changePhotoButton, { opacity: pressed ? 0.7 : 1 }]}
           >
             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change Photo</Text>
           </Pressable>
+        </View>
+
+        {/* Display Name */}
+        <View style={[styles.inputSection, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Display Name</Text>
+          <TextInput
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Your name"
+            placeholderTextColor={colors.textTertiary}
+            style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+            maxLength={50}
+          />
         </View>
 
         {/* Username */}
@@ -115,13 +179,16 @@ export default function EditProfileScreen() {
           <Text style={[styles.label, { color: colors.textSecondary }]}>{t.username}</Text>
           <TextInput
             value={username}
-            onChangeText={setUsername}
+            onChangeText={(v) => setUsername(v.toLowerCase())}
             placeholder={t.username}
             placeholderTextColor={colors.textTertiary}
             style={[styles.input, { color: colors.text, borderColor: colors.border }]}
             maxLength={30}
             autoCapitalize="none"
           />
+          <Text style={[styles.hint, { color: colors.textTertiary }]}>
+            Unique identifier, lowercase only
+          </Text>
         </View>
 
         {/* Bio */}
@@ -148,9 +215,7 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,9 +223,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  backButton: {
-    padding: 8,
-  },
+  backButton: { padding: 8 },
   headerTitle: {
     flex: 1,
     fontSize: 18,
@@ -168,9 +231,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     includeFontPadding: false,
   },
-  saveButton: {
-    padding: 8,
-  },
+  saveButton: { padding: 8 },
   avatarSection: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -203,6 +264,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderRadius: 8,
+  },
+  hint: {
+    fontSize: 12,
+    marginTop: 4,
+    includeFontPadding: false,
   },
   bioInput: {
     fontSize: 15,

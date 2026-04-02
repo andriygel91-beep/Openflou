@@ -12,6 +12,7 @@ import { generateMessageId, encryptMessage } from '@/services/encryption';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { StatusBar } from 'expo-status-bar';
+import { uploadMedia } from '@/services/mediaUpload';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -117,26 +118,45 @@ export default function ChatScreen() {
     });
 
     if (!result.canceled && currentUser && id) {
-      const newMessage: Message = {
-        id: generateMessageId(),
+      const localUri = result.assets[0].uri;
+
+      // Optimistic preview
+      const optimisticMsg: Message = {
+        id: `opt_${Date.now()}`,
         chatId: id,
         senderId: currentUser.id,
         content: '',
         type: 'photo',
-        mediaUrl: result.assets[0].uri,
+        mediaUrl: localUri,
         timestamp: new Date(),
         isRead: false,
         isEdited: false,
       };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+      // Upload to storage
+      const uploadedUrl = await uploadMedia(localUri, currentUser.id, 'image');
+      if (!uploadedUrl) {
+        showAlert('Failed to upload image');
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        return;
+      }
+
+      const newMessage: Message = {
+        ...optimisticMsg,
+        id: generateMessageId(),
+        mediaUrl: uploadedUrl,
+      };
+
+      // Replace optimistic with real
+      setMessages((prev) => prev.map((m) => m.id === optimisticMsg.id ? newMessage : m));
 
       const { error } = await sendMessage(newMessage);
       if (error) {
         showAlert(error);
-        return;
+        setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
       }
-      
-      setMessages((prev) => [...prev, newMessage]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }
 
@@ -175,9 +195,11 @@ export default function ChatScreen() {
 
   async function handleVoiceSend(uri: string, duration: number) {
     if (!currentUser || !id) return;
+    setIsRecordingMode(false);
 
-    const newMessage: Message = {
-      id: generateMessageId(),
+    // Optimistic
+    const optimisticMsg: Message = {
+      id: `opt_voice_${Date.now()}`,
       chatId: id,
       senderId: currentUser.id,
       content: '',
@@ -188,16 +210,29 @@ export default function ChatScreen() {
       isRead: false,
       isEdited: false,
     };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+    // Upload voice
+    const uploadedUrl = await uploadMedia(uri, currentUser.id, 'voice');
+    if (!uploadedUrl) {
+      showAlert('Failed to upload voice message');
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      return;
+    }
+
+    const newMessage: Message = {
+      ...optimisticMsg,
+      id: generateMessageId(),
+      mediaUrl: uploadedUrl,
+    };
+    setMessages((prev) => prev.map((m) => m.id === optimisticMsg.id ? newMessage : m));
 
     const { error } = await sendMessage(newMessage);
     if (error) {
       showAlert(error);
-      return;
+      setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
     }
-    
-    setMessages((prev) => [...prev, newMessage]);
-    setIsRecordingMode(false);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
   function handleMessageLongPress(message: Message) {
@@ -432,6 +467,23 @@ export default function ChatScreen() {
               onCancel={() => setIsRecordingMode(false)}
             />
           </View>
+        ) : chat?.type === 'channel' && !isAdmin && !isCreator ? (
+          // Channel non-admin: only show mute button
+          <View style={[styles.channelFooter, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 8) }]}>
+            <View style={[styles.channelInfoBanner, { backgroundColor: colors.surfaceSecondary }]}>
+              <MaterialIcons name="campaign" size={18} color={colors.textSecondary} />
+              <Text style={[styles.channelInfoText, { color: colors.textSecondary }]}>Channel · Read only</Text>
+            </View>
+            <Pressable
+              onPress={() => showAlert(chat.isMuted ? 'Unmuted' : 'Muted', `Notifications ${chat.isMuted ? 'enabled' : 'disabled'}`)}
+              style={({ pressed }) => [styles.muteButton, { backgroundColor: colors.surfaceSecondary, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <MaterialIcons name={chat.isMuted ? 'notifications-off' : 'notifications'} size={20} color={colors.primary} />
+              <Text style={[styles.muteButtonText, { color: colors.primary }]}>
+                {chat.isMuted ? 'Unmute' : 'Mute'}
+              </Text>
+            </Pressable>
+          </View>
         ) : (
           <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
             <Pressable onPress={handlePickImage} style={styles.attachButton}>
@@ -550,6 +602,40 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  channelFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  channelInfoBanner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  channelInfoText: {
+    fontSize: 13,
+    includeFontPadding: false,
+  },
+  muteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  muteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    includeFontPadding: false,
   },
   pinnedContainer: {
     flexDirection: 'row',

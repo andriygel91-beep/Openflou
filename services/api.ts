@@ -80,13 +80,19 @@ async function createSession(userId: string): Promise<void> {
       // Ignore IP fetch errors
     }
 
-    await supabase.from('openflou_sessions').insert({
+    const { data, error } = await supabase.from('openflou_sessions').insert({
       user_id: userId,
       device_name: deviceName,
       device_type: deviceType,
       platform,
       ip_address: ipAddress,
-    });
+    }).select('id').single();
+
+    // Save session ID locally for validation checks
+    if (data?.id && !error) {
+      const { saveSessionId } = await import('@/services/storage');
+      await saveSessionId(data.id);
+    }
   } catch (error) {
     console.error('Create session error:', error);
   }
@@ -205,6 +211,7 @@ export async function updateUser(user: User): Promise<{ error: string | null }> 
       .from('openflou_users')
       .update({
         username: user.username,
+        display_name: user.display_name,
         avatar: user.avatar,
         bio: user.bio,
         is_online: user.isOnline,
@@ -487,6 +494,21 @@ export async function deleteMessage(chatId: string, messageId: string): Promise<
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
+  }
+}
+
+export async function checkSessionExists(userId: string, sessionId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('openflou_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .single();
+    if (error) return false;
+    return !!data;
+  } catch {
+    return false;
   }
 }
 

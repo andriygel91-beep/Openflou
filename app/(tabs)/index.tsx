@@ -63,9 +63,8 @@ export default function ChatsTab() {
     if (!currentUser) return;
     
     const interval = setInterval(() => {
-      console.log('Auto-refresh chats');
       loadChats();
-    }, 5000);
+    }, 2000);
     
     return () => clearInterval(interval);
   }, [currentUser?.id]);
