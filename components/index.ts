@@ -6,3 +6,4 @@ export { EmptyState } from './ui/EmptyState';
 export { VoiceRecorder } from './ui/VoiceRecorder';
 export { ReactionPicker } from './ui/ReactionPicker';
 export { VoicePlayer } from './ui/VoicePlayer';
+export { MediaPicker } from './ui/MediaPicker';

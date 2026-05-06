@@ -23,10 +23,11 @@ Deno.serve(async (req) => {
         .insert({
           chat_id: message.chatId,
           sender_id: message.senderId,
-          content: message.content,
+          content: message.content || '',
           type: message.type,
           encrypted_content: message.encryptedContent,
-          media_url: message.mediaUrl,
+          media_url: message.mediaUrl || null,
+          iv: message.iv || null,
         })
         .select()
         .single();

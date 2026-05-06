@@ -1,22 +1,27 @@
 // Openflou Chat Screen
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TextInput,
+  Pressable, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
-import { Avatar, MessageBubble, VoiceRecorder, ReactionPicker } from '@/components';
+import { Avatar, MessageBubble, VoiceRecorder, ReactionPicker, MediaPicker } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Message } from '@/types';
 import { generateMessageId, encryptMessage } from '@/services/encryption';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { StatusBar } from 'expo-status-bar';
 import { uploadMedia } from '@/services/mediaUpload';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colors, t, chats, currentUser, getMessagesForChat, sendMessage, updateMessage, theme, addReaction, removeReaction } = useOpenFlou();
+  const {
+    colors, t, chats, currentUser,
+    getMessagesForChat, sendMessage, updateMessage, updateChat,
+    theme, addReaction, removeReaction,
+  } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -29,25 +34,29 @@ export default function ChatScreen() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editText, setEditText] = useState('');
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
 
   const chat = chats.find((c) => c.id === id);
   const isAdmin = chat?.admins?.includes(currentUser?.id || '');
   const isCreator = chat?.creatorId === currentUser?.id;
   const canManage = isAdmin || isCreator;
+  const canPost =
+    chat?.type !== 'channel' ||
+    isAdmin ||
+    isCreator;
 
-  // Auto-refresh messages every 500ms for faster updates
+  // Auto-refresh messages
   useEffect(() => {
-    if (id) {
-      loadMessages();
-      const interval = setInterval(() => {
-        loadMessages();
-      }, 500); // Refresh every 500ms (2x faster)
-      return () => clearInterval(interval);
-    }
+    if (!id) return;
+    loadMessages();
+    const interval = setInterval(loadMessages, 800);
+    return () => clearInterval(interval);
   }, [id]);
 
-  // Load pinned message
+  // Pinned message
   useEffect(() => {
     if (chat?.pinnedMessageId) {
       const pinned = messages.find((m) => m.id === chat.pinnedMessageId);
@@ -59,146 +68,131 @@ export default function ChatScreen() {
 
   async function loadMessages() {
     if (!id) return;
-    const loadedMessages = await getMessagesForChat(id);
-    setMessages(loadedMessages);
+    const loaded = await getMessagesForChat(id);
+    setMessages(loaded);
   }
 
+  // ── Text send ──
   async function handleSend() {
     if (!inputText.trim() || !currentUser || !id) return;
-
-    // Check if banned
+    if (!canPost) {
+      showAlert('Only admins can send messages in this channel');
+      return;
+    }
     if (chat?.bannedUsers?.includes(currentUser.id)) {
       showAlert('You are banned from this chat');
       return;
     }
 
-    // Check channel permissions
-    if (chat?.type === 'channel') {
-      const isAdmin = chat.admins?.includes(currentUser.id);
-      const isCreator = chat.creatorId === currentUser.id;
-      if (!isAdmin && !isCreator) {
-        showAlert('Only admins can send messages in this channel');
-        return;
-      }
-    }
+    const text = inputText.trim();
+    setInputText('');
 
-    const messageText = inputText.trim();
-    setInputText(''); // Clear input immediately for better UX
-
-    const newMessage: Message = {
+    const msg: Message = {
       id: generateMessageId(),
       chatId: id,
       senderId: currentUser.id,
-      content: messageText,
-      encryptedContent: encryptMessage(messageText),
+      content: text,
+      encryptedContent: encryptMessage(text),
       type: 'text',
       timestamp: new Date(),
       isRead: false,
       isEdited: false,
     };
 
-    // Optimistic update - show message immediately
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => [...prev, msg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
-    // Send to server in background
-    const { error } = await sendMessage(newMessage);
+    const { error } = await sendMessage(msg);
     if (error) {
       showAlert(error);
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
     }
   }
 
-  async function handlePickImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
+  // ── Media helpers ──
+  async function sendMedia(
+    uri: string,
+    type: 'photo' | 'video',
+    uploadType: 'image' | 'video'
+  ) {
+    if (!currentUser || !id) return;
+    setUploadingMedia(true);
 
-    if (!result.canceled && currentUser && id) {
-      const localUri = result.assets[0].uri;
+    const optimistic: Message = {
+      id: `opt_${Date.now()}`,
+      chatId: id,
+      senderId: currentUser.id,
+      content: '',
+      type,
+      mediaUrl: uri, // show local preview immediately
+      timestamp: new Date(),
+      isRead: false,
+      isEdited: false,
+    };
 
-      // Optimistic preview
-      const optimisticMsg: Message = {
-        id: `opt_${Date.now()}`,
-        chatId: id,
-        senderId: currentUser.id,
-        content: '',
-        type: 'photo',
-        mediaUrl: localUri,
-        timestamp: new Date(),
-        isRead: false,
-        isEdited: false,
-      };
-      setMessages((prev) => [...prev, optimisticMsg]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    setMessages((prev) => [...prev, optimistic]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
-      // Upload to storage
-      const uploadedUrl = await uploadMedia(localUri, currentUser.id, 'image');
-      if (!uploadedUrl) {
-        showAlert('Failed to upload image');
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
-        return;
-      }
+    const uploadedUrl = await uploadMedia(uri, currentUser.id, uploadType);
+    setUploadingMedia(false);
 
-      const newMessage: Message = {
-        ...optimisticMsg,
-        id: generateMessageId(),
-        mediaUrl: uploadedUrl,
-      };
+    if (!uploadedUrl) {
+      showAlert(`Failed to upload ${type}`);
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      return;
+    }
 
-      // Replace optimistic with real
-      setMessages((prev) => prev.map((m) => m.id === optimisticMsg.id ? newMessage : m));
+    const real: Message = { ...optimistic, id: generateMessageId(), mediaUrl: uploadedUrl };
+    setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? real : m)));
 
-      const { error } = await sendMessage(newMessage);
-      if (error) {
-        showAlert(error);
-        setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
-      }
+    const { error } = await sendMessage(real);
+    if (error) {
+      showAlert(error);
+      setMessages((prev) => prev.filter((m) => m.id !== real.id));
     }
   }
 
-  async function handlePickFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
+  async function handleFileSelected(uri: string, name: string, size: number) {
+    if (!currentUser || !id) return;
+    setUploadingMedia(true);
 
-    if (!result.canceled && currentUser && id) {
-      const file = result.assets[0];
-      const newMessage: Message = {
-        id: generateMessageId(),
-        chatId: id,
-        senderId: currentUser.id,
-        content: '',
-        type: 'file',
-        mediaUrl: file.uri,
-        fileName: file.name,
-        fileSize: file.size,
-        timestamp: new Date(),
-        isRead: false,
-        isEdited: false,
-      };
+    const uploadedUrl = await uploadMedia(uri, currentUser.id, 'file');
+    setUploadingMedia(false);
 
-      const { error } = await sendMessage(newMessage);
-      if (error) {
-        showAlert(error);
-        return;
-      }
-      
-      setMessages((prev) => [...prev, newMessage]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    if (!uploadedUrl) {
+      showAlert('Failed to upload file');
+      return;
     }
+
+    const msg: Message = {
+      id: generateMessageId(),
+      chatId: id,
+      senderId: currentUser.id,
+      content: '',
+      type: 'file',
+      mediaUrl: uploadedUrl,
+      fileName: name,
+      fileSize: size,
+      timestamp: new Date(),
+      isRead: false,
+      isEdited: false,
+    };
+
+    const { error } = await sendMessage(msg);
+    if (error) {
+      showAlert(error);
+      return;
+    }
+    setMessages((prev) => [...prev, msg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
+  // ── Voice ──
   async function handleVoiceSend(uri: string, duration: number) {
     if (!currentUser || !id) return;
     setIsRecordingMode(false);
 
-    // Optimistic
-    const optimisticMsg: Message = {
+    const optimistic: Message = {
       id: `opt_voice_${Date.now()}`,
       chatId: id,
       senderId: currentUser.id,
@@ -210,107 +204,88 @@ export default function ChatScreen() {
       isRead: false,
       isEdited: false,
     };
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => [...prev, optimistic]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
-    // Upload voice
     const uploadedUrl = await uploadMedia(uri, currentUser.id, 'voice');
     if (!uploadedUrl) {
       showAlert('Failed to upload voice message');
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       return;
     }
 
-    const newMessage: Message = {
-      ...optimisticMsg,
-      id: generateMessageId(),
-      mediaUrl: uploadedUrl,
-    };
-    setMessages((prev) => prev.map((m) => m.id === optimisticMsg.id ? newMessage : m));
+    const real: Message = { ...optimistic, id: generateMessageId(), mediaUrl: uploadedUrl };
+    setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? real : m)));
 
-    const { error } = await sendMessage(newMessage);
+    const { error } = await sendMessage(real);
     if (error) {
       showAlert(error);
-      setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
+      setMessages((prev) => prev.filter((m) => m.id !== real.id));
     }
   }
 
+  // ── Message actions ──
   function handleMessageLongPress(message: Message) {
-    if (message.type === 'text' && message.senderId === currentUser?.id) {
-      // Show menu for own messages
-      showAlert('Message Actions', '', [
-        { 
-          text: 'Edit', 
-          onPress: () => {
-            setEditingMessage(message);
-            setEditText(message.content);
-          }
+    const isOwn = message.senderId === currentUser?.id;
+
+    const buttons: any[] = [];
+
+    if (message.type === 'text' && isOwn) {
+      buttons.push({
+        text: 'Edit',
+        onPress: () => {
+          setEditingMessage(message);
+          setEditText(message.content);
         },
-        canManage && {
-          text: chat?.pinnedMessageId === message.id ? 'Unpin' : 'Pin Message',
-          onPress: () => handlePinMessage(message),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ].filter(Boolean));
-    } else {
-      // Show menu for other messages
-      if (canManage) {
-        showAlert('Message Actions', '', [
-          {
-            text: chat?.pinnedMessageId === message.id ? 'Unpin' : 'Pin Message',
-            onPress: () => handlePinMessage(message),
-          },
-          { 
-            text: 'React', 
-            onPress: () => {
-              setSelectedMessage(message);
-              setShowReactionPicker(true);
-            }
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-      } else {
+      });
+    }
+
+    if (canManage) {
+      buttons.push({
+        text: chat?.pinnedMessageId === message.id ? 'Unpin' : 'Pin Message',
+        onPress: () => handlePinMessage(message),
+      });
+    }
+
+    buttons.push({
+      text: 'React',
+      onPress: () => {
         setSelectedMessage(message);
         setShowReactionPicker(true);
-      }
+      },
+    });
+
+    if (isOwn) {
+      buttons.push({
+        text: 'Delete',
+        style: 'destructive' as const,
+        onPress: async () => {
+          // handled via server — just remove from local for now
+          setMessages((prev) => prev.filter((m) => m.id !== message.id));
+        },
+      });
     }
+
+    buttons.push({ text: 'Cancel', style: 'cancel' as const });
+    showAlert('Message', undefined, buttons);
   }
 
   async function handlePinMessage(message: Message) {
     if (!chat || !canManage) return;
-
     const updatedChat = {
       ...chat,
       pinnedMessageId: chat.pinnedMessageId === message.id ? undefined : message.id,
     };
-
     const { error } = await updateChat(updatedChat);
-    if (error) {
-      showAlert('Error', error);
-    }
+    if (error) showAlert('Error', error);
   }
 
   async function handleEditSubmit() {
-    if (!editingMessage || !editText.trim() || !id) return;
-    
-    const updatedMessage: Message = {
-      ...editingMessage,
-      content: editText.trim(),
-      isEdited: true,
-    };
-    
-    const { error } = await updateMessage(updatedMessage);
-    if (error) {
-      showAlert(error);
-      return;
-    }
-    
+    if (!editingMessage || !editText.trim()) return;
+    const updated: Message = { ...editingMessage, content: editText.trim(), isEdited: true };
+    const { error } = await updateMessage(updated);
+    if (error) { showAlert(error); return; }
     await loadMessages();
-    setEditingMessage(null);
-    setEditText('');
-  }
-
-  async function handleEditCancel() {
     setEditingMessage(null);
     setEditText('');
   }
@@ -323,24 +298,19 @@ export default function ChatScreen() {
 
   async function handleReactionPress(message: Message, emoji: string) {
     if (!currentUser || !id) return;
-    
-    const userReacted = message.reactions?.some(
-      (r) => r.emoji === emoji && r.userId === currentUser.id
-    );
-
-    if (userReacted) {
+    const reacted = message.reactions?.some((r) => r.emoji === emoji && r.userId === currentUser.id);
+    if (reacted) {
       await removeReaction(message.id, id, emoji);
     } else {
       await addReaction(message.id, id, emoji);
     }
-    
     await loadMessages();
   }
 
   if (!chat) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Chat not found</Text>
+        <Text style={{ color: colors.text, padding: 24 }}>Chat not found</Text>
       </SafeAreaView>
     );
   }
@@ -348,23 +318,20 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.chatBackground }]} edges={['top']}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
-        
-        <Avatar uri={chat.avatar} username={chat.name} size={40} isOnline={true} colors={colors} />
-        
+        <Avatar uri={chat.avatar} username={chat.name} size={40} isOnline colors={colors} />
         <View style={styles.headerInfo}>
-          <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>
-            {chat.name}
+          <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{chat.name}</Text>
+          <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>
+            {uploadingMedia ? 'Uploading...' : t.online}
           </Text>
-          <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>{t.online}</Text>
         </View>
-
-        <Pressable 
+        <Pressable
           onPress={() => {
             if (chat.type === 'group' || chat.type === 'channel') {
               router.push(`/chat-settings?id=${chat.id}`);
@@ -377,39 +344,33 @@ export default function ChatScreen() {
       </View>
 
       {/* Pinned Message */}
-      {pinnedMessage && (
+      {pinnedMessage ? (
         <Pressable
           onPress={() => {
-            const index = messages.findIndex((m) => m.id === pinnedMessage.id);
-            if (index !== -1) {
-              flatListRef.current?.scrollToIndex({ index, animated: true });
-            }
+            const idx = messages.findIndex((m) => m.id === pinnedMessage.id);
+            if (idx !== -1) flatListRef.current?.scrollToIndex({ index: idx, animated: true });
           }}
           style={[styles.pinnedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}
         >
-          <MaterialIcons name="push-pin" size={20} color={colors.primary} />
+          <MaterialIcons name="push-pin" size={18} color={colors.primary} />
           <View style={styles.pinnedContent}>
-            <Text style={[styles.pinnedLabel, { color: colors.primary }]}>Pinned Message</Text>
+            <Text style={[styles.pinnedLabel, { color: colors.primary }]}>Pinned</Text>
             <Text style={[styles.pinnedText, { color: colors.text }]} numberOfLines={1}>
-              {pinnedMessage.content || 'Media'}
+              {pinnedMessage.content || '📎 Media'}
             </Text>
           </View>
-          {canManage && (
-            <Pressable
-              onPress={() => handlePinMessage(pinnedMessage)}
-              style={styles.unpinButton}
-            >
-              <MaterialIcons name="close" size={20} color={colors.icon} />
+          {canManage ? (
+            <Pressable onPress={() => handlePinMessage(pinnedMessage)} style={styles.unpinButton}>
+              <MaterialIcons name="close" size={18} color={colors.icon} />
             </Pressable>
-          )}
+          ) : null}
         </Pressable>
-      )}
+      ) : null}
 
-      {/* Messages */}
+      {/* Messages + Input */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.chatContainer}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -425,13 +386,16 @@ export default function ChatScreen() {
             />
           )}
           contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           onScrollToIndexFailed={() => {}}
         />
 
-        {/* Input */}
+        {/* Input area */}
         {editingMessage ? (
           <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
+            <Pressable onPress={() => { setEditingMessage(null); setEditText(''); }} style={styles.attachButton}>
+              <MaterialIcons name="close" size={24} color={colors.error} />
+            </Pressable>
             <TextInput
               value={editText}
               onChangeText={setEditText}
@@ -442,20 +406,11 @@ export default function ChatScreen() {
               maxLength={4000}
               autoFocus
             />
-            <Pressable onPress={handleEditCancel} style={styles.attachButton}>
-              <MaterialIcons name="close" size={24} color={colors.error} />
-            </Pressable>
             <Pressable
               onPress={handleEditSubmit}
-              style={({ pressed }) => [
-                styles.sendButton,
-                {
-                  backgroundColor: colors.primary,
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
+              style={[styles.sendButton, { backgroundColor: colors.primary }]}
             >
-              <MaterialIcons name="check" size={20} color={colors.textInverted} />
+              <MaterialIcons name="check" size={20} color="#fff" />
             </Pressable>
           </View>
         ) : isRecordingMode ? (
@@ -467,8 +422,8 @@ export default function ChatScreen() {
               onCancel={() => setIsRecordingMode(false)}
             />
           </View>
-        ) : chat?.type === 'channel' && !isAdmin && !isCreator ? (
-          // Channel non-admin: only show mute button
+        ) : !canPost ? (
+          // Channel read-only footer
           <View style={[styles.channelFooter, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 8) }]}>
             <View style={[styles.channelInfoBanner, { backgroundColor: colors.surfaceSecondary }]}>
               <MaterialIcons name="campaign" size={18} color={colors.textSecondary} />
@@ -485,13 +440,11 @@ export default function ChatScreen() {
             </Pressable>
           </View>
         ) : (
+          // Normal input
           <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
-            <Pressable onPress={handlePickImage} style={styles.attachButton}>
-              <MaterialIcons name="image" size={24} color={colors.icon} />
-            </Pressable>
-            
-            <Pressable onPress={handlePickFile} style={styles.attachButton}>
-              <MaterialIcons name="attach-file" size={24} color={colors.icon} />
+            {/* Attach button → opens media picker */}
+            <Pressable onPress={() => setShowMediaPicker(true)} style={styles.attachButton}>
+              <MaterialIcons name="add-circle-outline" size={26} color={colors.primary} />
             </Pressable>
 
             <TextInput
@@ -507,27 +460,18 @@ export default function ChatScreen() {
             {inputText.trim() ? (
               <Pressable
                 onPress={handleSend}
-                style={({ pressed }) => [
-                  styles.sendButton,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
+                style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
               >
-                <MaterialIcons name="send" size={20} color={colors.textInverted} />
+                <MaterialIcons name="send" size={20} color="#fff" />
               </Pressable>
             ) : (
-              <Pressable
-                onPress={() => setIsRecordingMode(true)}
-                style={styles.attachButton}
-              >
-                <MaterialIcons name="mic" size={24} color={colors.icon} />
+              <Pressable onPress={() => setIsRecordingMode(true)} style={styles.attachButton}>
+                <MaterialIcons name="mic" size={26} color={colors.icon} />
               </Pressable>
             )}
           </View>
         )}
-        
+
         <ReactionPicker
           visible={showReactionPicker}
           colors={colors}
@@ -536,14 +480,22 @@ export default function ChatScreen() {
           onClose={() => setShowReactionPicker(false)}
         />
       </KeyboardAvoidingView>
+
+      {/* Telegram-like Media Picker */}
+      <MediaPicker
+        visible={showMediaPicker}
+        colors={colors}
+        onImage={(uri) => sendMedia(uri, 'photo', 'image')}
+        onVideo={(uri) => sendMedia(uri, 'video', 'video')}
+        onFile={handleFileSelected}
+        onClose={() => setShowMediaPicker(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -551,55 +503,33 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerInfo: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  headerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
-  headerStatus: {
-    fontSize: 13,
-    marginTop: 2,
-    includeFontPadding: false,
-  },
-  headerButton: {
-    padding: 8,
-  },
-  chatContainer: {
-    flex: 1,
-  },
-  messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
+  backButton: { padding: 8 },
+  headerInfo: { flex: 1, marginLeft: 8 },
+  headerName: { fontSize: 16, fontWeight: '600', includeFontPadding: false },
+  headerStatus: { fontSize: 13, marginTop: 2, includeFontPadding: false },
+  headerButton: { padding: 8 },
+  chatContainer: { flex: 1 },
+  messagesList: { paddingHorizontal: 12, paddingVertical: 12 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 8,
     paddingTop: 8,
+    gap: 4,
   },
-  attachButton: {
-    padding: 8,
-  },
+  attachButton: { padding: 6, justifyContent: 'center', alignItems: 'center' },
   input: {
     flex: 1,
-    maxHeight: 100,
-    borderRadius: 20,
+    maxHeight: 120,
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    marginHorizontal: 4,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -618,47 +548,28 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 22,
   },
-  channelInfoText: {
-    fontSize: 13,
-    includeFontPadding: false,
-  },
+  channelInfoText: { fontSize: 13, includeFontPadding: false },
   muteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 22,
   },
-  muteButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
+  muteButtonText: { fontSize: 14, fontWeight: '600', includeFontPadding: false },
   pinnedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     gap: 10,
   },
-  pinnedContent: {
-    flex: 1,
-  },
-  pinnedLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
-    includeFontPadding: false,
-  },
-  pinnedText: {
-    fontSize: 14,
-    includeFontPadding: false,
-  },
-  unpinButton: {
-    padding: 4,
-  },
+  pinnedContent: { flex: 1 },
+  pinnedLabel: { fontSize: 11, fontWeight: '700', marginBottom: 1, includeFontPadding: false },
+  pinnedText: { fontSize: 13, includeFontPadding: false },
+  unpinButton: { padding: 4 },
 });

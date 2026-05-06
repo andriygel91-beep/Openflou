@@ -71,7 +71,27 @@ async function createSession(userId: string): Promise<void> {
     const deviceName = Device.deviceName || 'Unknown Device';
     const deviceType = Device.modelName || 'Unknown Model';
     const platform = Device.osName || 'Unknown OS';
-    
+
+    // Check if a session for this device already exists — prevent duplicates
+    const { data: existing } = await supabase
+      .from('openflou_sessions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('device_name', deviceName)
+      .maybeSingle();
+
+    if (existing?.id) {
+      // Reuse existing session — just update last_active
+      await supabase
+        .from('openflou_sessions')
+        .update({ last_active: new Date().toISOString() })
+        .eq('id', existing.id);
+      const { saveSessionId } = await import('@/services/storage');
+      await saveSessionId(existing.id);
+      console.log('✅ Reused existing session:', existing.id);
+      return;
+    }
+
     let ipAddress = 'Unknown';
     try {
       const ip = await Network.getIpAddressAsync();
@@ -88,10 +108,10 @@ async function createSession(userId: string): Promise<void> {
       ip_address: ipAddress,
     }).select('id').single();
 
-    // Save session ID locally for validation checks
     if (data?.id && !error) {
       const { saveSessionId } = await import('@/services/storage');
       await saveSessionId(data.id);
+      console.log('✅ Created new session:', data.id);
     }
   } catch (error) {
     console.error('Create session error:', error);
@@ -397,13 +417,14 @@ export async function getMessages(chatId: string): Promise<Message[]> {
       id: msg.id,
       chatId: msg.chat_id,
       senderId: msg.sender_id,
-      content: msg.content,
-      type: msg.type,
+      content: msg.content || '',
+      type: msg.type as Message['type'],
       encryptedContent: msg.encrypted_content,
-      mediaUrl: msg.media_url,
+      mediaUrl: msg.media_url || undefined,
       reactions: msg.reactions || [],
-      isEdited: msg.is_edited,
+      isEdited: msg.is_edited || false,
       timestamp: new Date(msg.timestamp),
+      isRead: false,
     }));
   } catch (error) {
     console.error('Get messages error:', error);
