@@ -69,7 +69,11 @@ export default function ChatScreen() {
   async function loadMessages() {
     if (!id) return;
     const loaded = await getMessagesForChat(id);
-    setMessages(loaded);
+    setMessages((prev) => {
+      // Preserve optimistic messages not yet confirmed by server
+      const optimistic = prev.filter((m) => m.id.startsWith('opt_'));
+      return [...loaded, ...optimistic];
+    });
   }
 
   // ── Text send ──
