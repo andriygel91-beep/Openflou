@@ -70,9 +70,16 @@ export default function ChatScreen() {
     if (!id) return;
     const loaded = await getMessagesForChat(id);
     setMessages((prev) => {
-      // Preserve optimistic messages not yet confirmed by server
-      const optimistic = prev.filter((m) => m.id.startsWith('opt_'));
-      return [...loaded, ...optimistic];
+      // Keep optimistic messages whose ID hasn't appeared in server results yet
+      const serverIds = new Set(loaded.map((m) => m.id));
+      const pendingOptimistic = prev.filter(
+        (m) => m.id.startsWith('opt_') && !serverIds.has(m.id)
+      );
+      // Merge: server messages + still-pending optimistic ones, sorted by timestamp
+      const merged = [...loaded, ...pendingOptimistic].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      return merged;
     });
   }
 
@@ -91,8 +98,9 @@ export default function ChatScreen() {
     const text = inputText.trim();
     setInputText('');
 
+    const optimisticId = `opt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const msg: Message = {
-      id: generateMessageId(),
+      id: optimisticId,
       chatId: id,
       senderId: currentUser.id,
       content: text,
@@ -109,7 +117,7 @@ export default function ChatScreen() {
     const { error } = await sendMessage(msg);
     if (error) {
       showAlert(error);
-      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
     }
   }
 
@@ -336,11 +344,7 @@ export default function ChatScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={() => {
-            if (chat.type === 'group' || chat.type === 'channel') {
-              router.push(`/chat-settings?id=${chat.id}`);
-            }
-          }}
+          onPress={() => router.push(`/chat-settings?id=${chat.id}`)}
           style={styles.headerButton}
         >
           <MaterialIcons name="info-outline" size={24} color={colors.icon} />

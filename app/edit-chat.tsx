@@ -1,7 +1,9 @@
 // Openflou Edit Chat Screen (Groups & Channels)
 import React, { useState, useEffect } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, FlatList } from 'react-native';
+import {
+  View, Text, StyleSheet, Pressable, TextInput, ScrollView, Switch,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -10,121 +12,112 @@ import { useAlert } from '@/template';
 import { Avatar } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Chat } from '@/types';
-import * as api from '@/services/api';
 import { getSupabaseClient } from '@/template';
 import { StatusBar } from 'expo-status-bar';
+import * as FileSystem from 'expo-file-system';
 
 export default function EditChatScreen() {
-  const { colors, t, updateChat, contacts, loadContacts, currentUser, theme } = useOpenFlou();
+  const { colors, t, theme, updateChat, contacts, loadContacts, currentUser, chats } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [chat, setChat] = useState<Chat | null>(null);
+  const chat = chats.find((c) => c.id === id) || null;
+
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [avatar, setAvatar] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [disappearingEnabled, setDisappearingEnabled] = useState(false);
+  const [disappearingTimer, setDisappearingTimer] = useState(86400); // 1 day default
+  const [isPublic, setIsPublic] = useState(true);
 
   useEffect(() => {
-    loadChat();
-    loadContacts();
-  }, [id]);
-
-  async function loadChat() {
-    if (!id || !currentUser) return;
-    
-    const { data: chatData } = await getSupabaseClient()
-      .from('openflou_chats')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    const foundChat = chatData ? {
-      id: chatData.id,
-      type: chatData.type,
-      name: chatData.name,
-      username: chatData.username,
-      avatar: chatData.avatar,
-      description: chatData.description,
-      participants: chatData.participants || [],
-      admins: chatData.admins || [],
-      creatorId: chatData.creator_id,
-      bannedUsers: chatData.banned_users || [],
-      unreadCount: 0,
-      isPinned: false,
-      isMuted: false,
-      createdAt: new Date(chatData.created_at),
-    } as Chat : null;
-    
-    if (foundChat) {
-      setChat(foundChat);
-      setName(foundChat.name || '');
-      setUsername(foundChat.username || '');
-      setDescription(foundChat.description || '');
-      setAvatar(foundChat.avatar);
-      setSelectedMembers(foundChat.participants.filter((p) => p !== currentUser?.id));
+    if (chat) {
+      setName(chat.name || '');
+      setUsername(chat.username || '');
+      setDescription(chat.description || '');
+      setAvatar(chat.avatar);
+      setSelectedMembers(chat.participants.filter((p) => p !== currentUser?.id));
+      setDisappearingEnabled(chat.disappearingMessagesEnabled || false);
+      setDisappearingTimer(chat.disappearingMessagesTimer || 86400);
+      setIsPublic(!!chat.username);
     }
-  }
+    loadContacts();
+  }, [chat?.id]);
 
   function toggleMember(userId: string) {
     setSelectedMembers((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      prev.includes(userId) ? prev.filter((mid) => mid !== userId) : [...prev, userId]
     );
+  }
+
+  async function pickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { showAlert('Permission denied'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatar(result.assets[0].uri);
+    }
+  }
+
+  async function uploadAvatarIfNeeded(uri: string | undefined): Promise<string | undefined> {
+    if (!uri || !uri.startsWith('file://')) return uri;
+    try {
+      const supabase = getSupabaseClient();
+      const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+      const path = `avatars/chat_${id}_${Date.now()}.${ext}`;
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const { error } = await supabase.storage.from('openflou-media').upload(path, bytes.buffer, {
+        contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+        upsert: true,
+      });
+      if (error) { console.error('Avatar upload error:', error); return uri; }
+      const { data } = supabase.storage.from('openflou-media').getPublicUrl(path);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('Avatar upload failed:', e);
+      return uri;
+    }
   }
 
   async function handleSave() {
     if (!name.trim()) {
-      showAlert(chat?.type === 'channel' ? 'Channel name cannot be empty' : 'Group name cannot be empty');
+      showAlert(isChannel ? 'Channel name cannot be empty' : 'Group name cannot be empty');
       return;
     }
-
     if (!chat || !currentUser) return;
+    setSaving(true);
 
-    let finalAvatar = avatar;
-    // Upload avatar if it's a local file
-    if (avatar && avatar.startsWith('file://')) {
-      try {
-        const supabase = getSupabaseClient();
-        const ext = avatar.split('.').pop() || 'jpg';
-        const path = `avatars/chat_${chat.id}_${Date.now()}.${ext}`;
-        const response = await fetch(avatar);
-        const blob = await response.blob();
-        const ab = await new Promise<ArrayBuffer>((res, rej) => {
-          const fr = new FileReader();
-          fr.onload = () => res(fr.result as ArrayBuffer);
-          fr.onerror = rej;
-          fr.readAsArrayBuffer(blob);
-        });
-        const { error: upErr } = await supabase.storage.from('openflou-media').upload(path, ab, {
-          contentType: `image/${ext}`,
-          upsert: true,
-        });
-        if (!upErr) {
-          const { data: urlData } = supabase.storage.from('openflou-media').getPublicUrl(path);
-          finalAvatar = urlData.publicUrl;
-        }
-      } catch (e) {
-        console.error('Avatar upload failed:', e);
-      }
-    }
+    const finalAvatar = await uploadAvatarIfNeeded(avatar);
 
     const updatedChat: Chat = {
       ...chat,
       name: name.trim(),
-      username: username.trim() || undefined,
+      username: isPublic && username.trim() ? username.trim() : undefined,
       description: description.trim() || undefined,
       avatar: finalAvatar,
-      participants: [currentUser.id, ...selectedMembers],
+      participants: isChannel
+        ? chat.participants
+        : [currentUser.id, ...selectedMembers],
+      disappearingMessagesEnabled: disappearingEnabled,
+      disappearingMessagesTimer: disappearingEnabled ? disappearingTimer : undefined,
     };
 
     const { error } = await updateChat(updatedChat);
-    if (error) {
-      showAlert('Error', error);
-      return;
-    }
-    showAlert(chat.type === 'channel' ? 'Channel updated' : 'Group updated');
+    setSaving(false);
+    if (error) { showAlert('Error', error); return; }
+    showAlert(isChannel ? 'Channel updated' : 'Group updated');
     router.back();
   }
 
@@ -138,175 +131,220 @@ export default function EditChatScreen() {
 
   const isChannel = chat.type === 'channel';
 
+  const TIMER_OPTIONS = [
+    { label: '30 sec', value: 30 },
+    { label: '1 min', value: 60 },
+    { label: '5 min', value: 300 },
+    { label: '1 hour', value: 3600 },
+    { label: '1 day', value: 86400 },
+    { label: '1 week', value: 604800 },
+  ];
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {isChannel ? t.editChannel : t.editGroup}
+          {isChannel ? 'Edit Channel' : 'Edit Group'}
         </Text>
         <Pressable
           onPress={handleSave}
-          disabled={!name.trim()}
-          style={({ pressed }) => [
-            styles.saveButton,
-            {
-              opacity: !name.trim() ? 0.3 : pressed ? 0.7 : 1,
-            },
-          ]}
+          disabled={!name.trim() || saving}
+          style={({ pressed }) => [styles.saveButton, { opacity: !name.trim() || saving ? 0.4 : pressed ? 0.7 : 1 }]}
         >
           <MaterialIcons name="check" size={24} color={colors.primary} />
         </Pressable>
       </View>
 
-      <ScrollView>
-        {/* Icon & Name */}
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Pressable
-            onPress={async () => {
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== 'granted') {
-                showAlert('Permission denied');
-                return;
-              }
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (!result.canceled && result.assets[0]) {
-                // Store local URI temporarily; it will be uploaded on save
-                setAvatar(result.assets[0].uri);
-              }
-            }}
-            style={({ pressed }) => [
-              styles.icon,
-              {
-                backgroundColor: colors.surfaceSecondary,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Avatar + Name */}
+        <View style={[styles.avatarSection, { backgroundColor: colors.surface }]}>
+          <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatarWrap, { opacity: pressed ? 0.75 : 1 }]}>
             {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.iconImage} />
+              <Image source={{ uri: avatar }} style={styles.avatarImage} contentFit="cover" />
             ) : (
-              <MaterialIcons name={isChannel ? 'campaign' : 'group'} size={32} color={colors.icon} />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
+                <MaterialIcons name={isChannel ? 'campaign' : 'group'} size={36} color={colors.icon} />
+              </View>
             )}
+            <View style={[styles.avatarEditBadge, { backgroundColor: colors.primary }]}>
+              <MaterialIcons name="photo-camera" size={14} color="#fff" />
+            </View>
           </Pressable>
-          <View style={styles.inputContainer}>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder={isChannel ? t.channelName : t.groupName}
-              placeholderTextColor={colors.textTertiary}
-              style={[styles.input, { color: colors.text }]}
-              maxLength={50}
-            />
-            <TextInput
-              value={username}
-              onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-              placeholder="@username (optional)"
-              placeholderTextColor={colors.textTertiary}
-              style={[styles.usernameInput, { color: colors.textSecondary }]}
-              maxLength={32}
-              autoCapitalize="none"
-            />
+
+          <View style={styles.nameBlock}>
+            <View style={[styles.inputRow, { borderBottomColor: colors.border }]}>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder={isChannel ? 'Channel name' : 'Group name'}
+                placeholderTextColor={colors.textTertiary}
+                style={[styles.nameInput, { color: colors.text }]}
+                maxLength={50}
+              />
+            </View>
+            {isPublic && (
+              <View style={[styles.inputRow, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.atSign, { color: colors.textSecondary }]}>@</Text>
+                <TextInput
+                  value={username}
+                  onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  placeholder="username (optional)"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[styles.usernameInput, { color: colors.textSecondary }]}
+                  maxLength={32}
+                  autoCapitalize="none"
+                />
+              </View>
+            )}
           </View>
         </View>
 
         {/* Description */}
-        <View style={[styles.descriptionSection, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>
-            {isChannel ? t.channelDescription : 'Description'}
-          </Text>
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>DESCRIPTION</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
             placeholder={isChannel ? 'What is your channel about?' : 'What is your group about?'}
             placeholderTextColor={colors.textTertiary}
-            style={[styles.descriptionInput, { color: colors.text }]}
-            maxLength={200}
+            style={[styles.descInput, { color: colors.text }]}
+            maxLength={500}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
           />
+          <Text style={[styles.charCount, { color: colors.textTertiary }]}>{description.length}/500</Text>
         </View>
 
-        {/* Members/Subscribers */}
+        {/* Channel-specific: Public/Private toggle */}
+        {isChannel && (
+          <View style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>CHANNEL TYPE</Text>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                  {isPublic ? 'Public Channel' : 'Private Channel'}
+                </Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {isPublic
+                    ? 'Anyone can find and join via @username'
+                    : 'Only invited users can join'}
+                </Text>
+              </View>
+              <Switch
+                value={isPublic}
+                onValueChange={setIsPublic}
+                trackColor={{ false: colors.border, true: colors.primary + '88' }}
+                thumbColor={isPublic ? colors.primary : colors.icon}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Disappearing messages */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>DISAPPEARING MESSAGES</Text>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-delete messages</Text>
+              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                Messages will be deleted after a set time
+              </Text>
+            </View>
+            <Switch
+              value={disappearingEnabled}
+              onValueChange={setDisappearingEnabled}
+              trackColor={{ false: colors.border, true: colors.primary + '88' }}
+              thumbColor={disappearingEnabled ? colors.primary : colors.icon}
+            />
+          </View>
+
+          {disappearingEnabled && (
+            <View style={styles.timerGrid}>
+              {TIMER_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setDisappearingTimer(opt.value)}
+                  style={[
+                    styles.timerChip,
+                    {
+                      backgroundColor: disappearingTimer === opt.value ? colors.primary : colors.surfaceSecondary,
+                      borderColor: disappearingTimer === opt.value ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.timerChipText,
+                      { color: disappearingTimer === opt.value ? '#fff' : colors.text },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Members (groups only) */}
         {!isChannel && (
-          <>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-              {selectedMembers.length} {t.members}
+          <View style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+              MEMBERS · {selectedMembers.length + 1}
             </Text>
-            
-            <View style={styles.membersList}>
-              {contacts.map((contact) => {
-                const isSelected = selectedMembers.includes(contact.userId);
-                
-                return (
-                  <Pressable
-                    key={contact.userId}
-                    onPress={() => toggleMember(contact.userId)}
-                    style={({ pressed }) => [
-                      styles.memberItem,
+            {contacts.map((contact) => {
+              const isSelected = selectedMembers.includes(contact.userId);
+              return (
+                <Pressable
+                  key={contact.userId}
+                  onPress={() => toggleMember(contact.userId)}
+                  style={({ pressed }) => [
+                    styles.memberRow,
+                    { backgroundColor: pressed ? colors.surfaceSecondary : 'transparent' },
+                  ]}
+                >
+                  <Avatar uri={contact.avatar} username={contact.username} size={46} colors={colors} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.memberName, { color: colors.text }]}>{contact.username}</Text>
+                    {contact.bio ? (
+                      <Text style={[styles.memberBio, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {contact.bio}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View
+                    style={[
+                      styles.checkbox,
                       {
-                        backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                        backgroundColor: isSelected ? colors.primary : 'transparent',
                       },
                     ]}
                   >
-                    <Avatar
-                      uri={contact.avatar}
-                      username={contact.username}
-                      size={48}
-                      isOnline={contact.isOnline}
-                      colors={colors}
-                    />
-                    <View style={styles.memberInfo}>
-                      <Text style={[styles.memberName, { color: colors.text }]}>{contact.username}</Text>
-                      {contact.bio && (
-                        <Text style={[styles.memberBio, { color: colors.textSecondary }]} numberOfLines={1}>
-                          {contact.bio}
-                        </Text>
-                      )}
-                    </View>
-                    <View
-                      style={[
-                        styles.checkbox,
-                        {
-                          borderColor: isSelected ? colors.primary : colors.border,
-                          backgroundColor: isSelected ? colors.primary : 'transparent',
-                        },
-                      ]}
-                    >
-                      {isSelected && <MaterialIcons name="check" size={18} color={colors.textInverted} />}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
+                    {isSelected ? <MaterialIcons name="check" size={16} color="#fff" /> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  loadingText: {
-    textAlign: 'center',
-    marginTop: 32,
-    fontSize: 16,
-    includeFontPadding: false,
-  },
+  safeArea: { flex: 1 },
+  loadingText: { textAlign: 'center', marginTop: 32, fontSize: 16, includeFontPadding: false },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,97 +352,84 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-    includeFontPadding: false,
-  },
-  saveButton: {
-    padding: 8,
-  },
-  section: {
+  backButton: { padding: 8 },
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: '600', marginLeft: 8, includeFontPadding: false },
+  saveButton: { padding: 8 },
+  // Avatar section
+  avatarSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginTop: 8,
+    padding: 20,
+    marginBottom: 12,
+    gap: 16,
   },
-  icon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  avatarWrap: { position: 'relative' },
+  avatarImage: { width: 72, height: 72, borderRadius: 36 },
+  avatarPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
   },
-  iconImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  inputContainer: {
-    flex: 1,
-    marginLeft: 16,
+  nameBlock: { flex: 1, gap: 4 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingBottom: 6 },
+  atSign: { fontSize: 16, marginRight: 4, includeFontPadding: false },
+  nameInput: { flex: 1, fontSize: 18, fontWeight: '600', includeFontPadding: false },
+  usernameInput: { flex: 1, fontSize: 15, includeFontPadding: false },
+  // Sections
+  section: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 12,
   },
-  input: {
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  usernameInput: {
-    fontSize: 14,
-  },
-  descriptionSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 8,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 12,
     includeFontPadding: false,
   },
-  descriptionInput: {
-    fontSize: 15,
-    minHeight: 80,
+  descInput: { fontSize: 15, minHeight: 90, includeFontPadding: false, lineHeight: 22 },
+  charCount: { fontSize: 12, textAlign: 'right', marginTop: 6, includeFontPadding: false },
+  // Toggle
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  toggleLabel: { fontSize: 15, fontWeight: '500', includeFontPadding: false },
+  toggleSub: { fontSize: 13, marginTop: 2, includeFontPadding: false },
+  // Timer
+  timerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 8,
-    includeFontPadding: false,
+  timerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
   },
-  membersList: {
-    marginTop: 4,
-  },
-  memberItem: {
+  timerChipText: { fontSize: 13, fontWeight: '500', includeFontPadding: false },
+  // Members
+  memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 4,
   },
-  memberInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  memberName: {
-    fontSize: 16,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
-  memberBio: {
-    fontSize: 14,
-    marginTop: 2,
-    includeFontPadding: false,
-  },
+  memberName: { fontSize: 15, fontWeight: '600', includeFontPadding: false },
+  memberBio: { fontSize: 13, marginTop: 2, includeFontPadding: false },
   checkbox: {
     width: 24,
     height: 24,

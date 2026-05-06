@@ -227,16 +227,21 @@ export async function getUserById(userId: string): Promise<User | null> {
 
 export async function updateUser(user: User): Promise<{ error: string | null }> {
   try {
+    const updatePayload: Record<string, any> = {
+      username: user.username?.toLowerCase(),
+      avatar: user.avatar ?? null,
+      bio: user.bio ?? null,
+      is_online: user.isOnline ?? false,
+      updated_at: new Date().toISOString(),
+    };
+    // display_name lives in openflou_users
+    if ('display_name' in user) {
+      updatePayload['display_name'] = (user as any).display_name || user.username;
+    }
+
     const { error } = await supabase
       .from('openflou_users')
-      .update({
-        username: user.username,
-        display_name: user.display_name,
-        avatar: user.avatar,
-        bio: user.bio,
-        is_online: user.isOnline,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', user.id);
 
     if (error) throw error;
