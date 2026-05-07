@@ -1,5 +1,5 @@
 // Openflou Active Sessions Screen
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,43 +21,43 @@ interface Session {
 }
 
 export default function SessionsScreen() {
-  const { colors, t, theme, currentUser } = useOpenFlou();
+  const { colors, theme, currentUser } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
-  
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     init();
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   async function init() {
     const sessionId = await storage.getSessionId();
     setCurrentSessionId(sessionId);
     if (currentUser) {
-      await loadSessions();
+      await loadSessions(sessionId);
     }
   }
 
-  async function loadSessions() {
+  async function loadSessions(sessionId?: string | null) {
     if (!currentUser) return;
-    
+
     const { sessions: loadedSessions, error } = await api.getSessions(currentUser.id);
-    
+
     if (error) {
       showAlert('Error loading sessions', error);
       return;
     }
-    
-    const sessionId = await storage.getSessionId();
+
+    const sid = sessionId ?? currentSessionId;
     const sorted = [...loadedSessions].sort((a, b) => {
-      if (a.id === sessionId) return -1;
-      if (b.id === sessionId) return 1;
+      if (a.id === sid) return -1;
+      if (b.id === sid) return 1;
       return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
     });
-    
+
     setSessions(sorted);
   }
 
@@ -67,18 +67,12 @@ export default function SessionsScreen() {
     setRefreshing(false);
   }
 
-  async function handleTerminateSession(sessionId: string, isCurrent: boolean) {
-    if (isCurrent) {
-      showAlert('Cannot terminate current session', 'Use Logout from Settings to sign out.');
-      return;
-    }
-    
+  async function handleTerminateSession(sessionId: string) {
     const { error } = await api.deleteSession(sessionId);
     if (error) {
       showAlert('Error', `Failed to terminate session: ${error}`);
       return;
     }
-    
     showAlert('Session terminated');
     await loadSessions();
   }
@@ -129,7 +123,7 @@ export default function SessionsScreen() {
         <View style={styles.infoContainer}>
           <MaterialIcons name="info-outline" size={20} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            These are the devices currently logged into your account. Terminate any sessions you do not recognize.
+            Devices currently logged into your account. Terminate sessions you do not recognize.
           </Text>
         </View>
 
@@ -142,7 +136,7 @@ export default function SessionsScreen() {
         ) : (
           sessions.map((session, index) => {
             const isCurrent = session.id === currentSessionId;
-            
+
             return (
               <View
                 key={session.id}
@@ -158,8 +152,17 @@ export default function SessionsScreen() {
                 ]}
               >
                 <View style={styles.sessionLeft}>
-                  <View style={[styles.iconContainer, { backgroundColor: isCurrent ? colors.primary + '22' : colors.surfaceSecondary }]}>
-                    <MaterialIcons name={getDeviceIcon(session.platform)} size={24} color={isCurrent ? colors.primary : colors.icon} />
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: isCurrent ? colors.primary + '22' : colors.surfaceSecondary },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name={getDeviceIcon(session.platform)}
+                      size={24}
+                      color={isCurrent ? colors.primary : colors.icon}
+                    />
                   </View>
                   <View style={styles.sessionInfo}>
                     <View style={styles.deviceNameRow}>
@@ -173,7 +176,7 @@ export default function SessionsScreen() {
                       ) : null}
                     </View>
                     <Text style={[styles.deviceType, { color: colors.textSecondary }]}>
-                      {session.device_type || 'Unknown Model'} · {session.platform}
+                      {session.device_type || 'Unknown'} · {session.platform}
                     </Text>
                     <Text style={[styles.metaText, { color: colors.textTertiary }]}>
                       {session.ip_address}
@@ -183,22 +186,20 @@ export default function SessionsScreen() {
                     </Text>
                   </View>
                 </View>
-                
-                {!isCurrent ? (
+
+                {isCurrent ? (
+                  <MaterialIcons name="check-circle" size={20} color={colors.primary} style={{ marginRight: 4 }} />
+                ) : (
                   <Pressable
                     onPress={() =>
-                      showAlert(
-                        'Terminate Session?',
-                        'This device will be logged out immediately.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Terminate',
-                            style: 'destructive',
-                            onPress: () => handleTerminateSession(session.id, false),
-                          },
-                        ]
-                      )
+                      showAlert('Terminate Session?', 'This device will be logged out immediately.', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Terminate',
+                          style: 'destructive',
+                          onPress: () => handleTerminateSession(session.id),
+                        },
+                      ])
                     }
                     style={({ pressed }) => [
                       styles.terminateButton,
@@ -207,18 +208,16 @@ export default function SessionsScreen() {
                   >
                     <MaterialIcons name="close" size={20} color={colors.error} />
                   </Pressable>
-                ) : (
-                  <MaterialIcons name="check-circle" size={20} color={colors.primary} style={{ marginRight: 4 }} />
                 )}
               </View>
             );
           })
         )}
 
-        {/* Terminate All */}
+        {/* Terminate All Other */}
         {sessions.length > 1 && (
           <Pressable
-            onPress={() => {
+            onPress={() =>
               showAlert(
                 'Terminate All Other Sessions?',
                 'All devices except this one will be logged out.',
@@ -231,7 +230,7 @@ export default function SessionsScreen() {
                       if (!currentUser || !currentSessionId) return;
                       const { error } = await api.deleteAllOtherSessions(currentUser.id, currentSessionId);
                       if (error) {
-                        showAlert('Error', `Failed to terminate sessions: ${error}`);
+                        showAlert('Error', error);
                         return;
                       }
                       showAlert('All other sessions terminated');
@@ -239,8 +238,8 @@ export default function SessionsScreen() {
                     },
                   },
                 ]
-              );
-            }}
+              )
+            }
             style={({ pressed }) => [
               styles.terminateAllButton,
               { backgroundColor: pressed ? colors.surfaceSecondary : colors.surface },
@@ -360,386 +359,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
     flexShrink: 0,
-  },
-  terminateAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginTop: 16,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  terminateAllText: {
-    fontSize: 16,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
-});
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useOpenFlou } from '@/hooks/useOpenFlou';
-import { useAlert } from '@/template';
-import { MaterialIcons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
-import * as Device from 'expo-device';
-import * as api from '@/services/api';
-
-interface Session {
-  id: string;
-  device_name: string;
-  device_type: string;
-  platform: string;
-  ip_address: string;
-  last_active: string;
-  created_at: string;
-}
-
-export default function SessionsScreen() {
-  const { colors, t, theme, currentUser } = useOpenFlou();
-  const { showAlert } = useAlert();
-  const router = useRouter();
-  
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    if (currentUser) {
-      loadSessions();
-    }
-  }, [currentUser]);
-
-  async function loadSessions() {
-    if (!currentUser) {
-      console.log('No current user, cannot load sessions');
-      return;
-    }
-    
-    console.log('Loading sessions for user:', currentUser.id);
-    const { sessions: loadedSessions, error } = await api.getSessions(currentUser.id);
-    
-    if (error) {
-      console.error('Session load error:', error);
-      showAlert('Error loading sessions', error);
-      return;
-    }
-    
-    console.log('Loaded sessions:', loadedSessions.length);
-    
-    const currentDevice = Device.deviceName || 'Unknown Device';
-    const sorted = loadedSessions.sort((a, b) => {
-      if (a.device_name === currentDevice) return -1;
-      if (b.device_name === currentDevice) return 1;
-      return new Date(b.last_active).getTime() - new Date(a.last_active).getTime();
-    });
-    
-    setSessions(sorted);
-  }
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await loadSessions();
-    setRefreshing(false);
-  }
-
-  async function handleTerminateSession(sessionId: string, isCurrentDevice: boolean) {
-    if (isCurrentDevice) {
-      showAlert(
-        'Cannot terminate current device',
-        'You cannot terminate the session you are currently using. Use logout from settings instead.'
-      );
-      return;
-    }
-    
-    const { error } = await api.deleteSession(sessionId);
-    
-    if (error) {
-      showAlert('Error', `Failed to terminate session: ${error}`);
-      return;
-    }
-    
-    showAlert('Success', 'Session terminated successfully');
-    await loadSessions();
-  }
-
-  function formatDate(dateString: string) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return date.toLocaleDateString();
-  }
-
-  function getDeviceIcon(platform: string): keyof typeof MaterialIcons.glyphMap {
-    const p = platform.toLowerCase();
-    if (p.includes('ios')) return 'phone-iphone';
-    if (p.includes('android')) return 'phone-android';
-    if (p.includes('windows')) return 'computer';
-    if (p.includes('mac')) return 'laptop-mac';
-    return 'devices';
-  }
-
-  const currentDeviceName = Device.deviceName || 'Unknown Device';
-
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Active Sessions</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
-        }
-      >
-        {/* Info */}
-        <View style={styles.infoContainer}>
-          <MaterialIcons name="info-outline" size={20} color={colors.textSecondary} />
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            These are the devices currently logged into your account. Terminate any sessions you don't recognize.
-          </Text>
-        </View>
-
-        {/* Sessions List */}
-        {sessions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="devices" size={48} color={colors.textTertiary} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No active sessions</Text>
-          </View>
-        ) : (
-          sessions.map((session, index) => {
-            const isCurrentDevice = session.device_name === currentDeviceName;
-            
-            return (
-              <View
-                key={session.id}
-                style={[
-                  styles.sessionItem,
-                  {
-                    backgroundColor: colors.surface,
-                    borderBottomWidth: index === sessions.length - 1 ? 0 : 1,
-                    borderBottomColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.sessionLeft}>
-                  <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSecondary }]}>
-                    <MaterialIcons name={getDeviceIcon(session.platform)} size={24} color={colors.primary} />
-                  </View>
-                  <View style={styles.sessionInfo}>
-                    <Text style={[styles.deviceName, { color: colors.text }]}>
-                      {session.device_name || 'Unknown Device'}
-                      {isCurrentDevice && (
-                        <Text style={[styles.currentBadge, { color: colors.online }]}> (This device)</Text>
-                      )}
-                    </Text>
-                    <Text style={[styles.deviceType, { color: colors.textSecondary }]}>
-                      {session.device_type || 'Unknown Model'}
-                    </Text>
-                    <View style={styles.sessionMeta}>
-                      <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-                        {session.platform} • {session.ip_address}
-                      </Text>
-                    </View>
-                    <Text style={[styles.lastActive, { color: colors.textTertiary }]}>
-                      Last active: {formatDate(session.last_active)}
-                    </Text>
-                  </View>
-                </View>
-                
-                <Pressable
-                  onPress={() => {
-                    if (isCurrentDevice) {
-                      handleTerminateSession(session.id, true);
-                      return;
-                    }
-                    
-                    showAlert(
-                      'Terminate Session?',
-                      'This device will be logged out immediately.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Terminate',
-                          style: 'destructive',
-                          onPress: () => handleTerminateSession(session.id, false),
-                        },
-                      ]
-                    );
-                  }}
-                  style={({ pressed }) => [
-                    styles.terminateButton,
-                    {
-                      backgroundColor: pressed ? colors.surfaceSecondary : 'transparent',
-                    },
-                  ]}
-                >
-                  <MaterialIcons name="close" size={20} color={colors.error} />
-                </Pressable>
-              </View>
-            );
-          })
-        )}
-
-        {/* Terminate All */}
-        {sessions.length > 1 && (
-          <Pressable
-            onPress={() => {
-              showAlert(
-                'Terminate All Other Sessions?',
-                'All devices except this one will be logged out.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Terminate All',
-                    style: 'destructive',
-                    onPress: async () => {
-                      if (!currentUser) return;
-                      
-                      const currentDevice = Device.deviceName || 'Unknown Device';
-                      const { error } = await api.deleteAllOtherSessions(currentUser.id, currentDevice);
-                      
-                      if (error) {
-                        showAlert('Error', `Failed to terminate sessions: ${error}`);
-                        return;
-                      }
-                      
-                      showAlert('Success', 'All other sessions terminated');
-                      await loadSessions();
-                    },
-                  },
-                ]
-              );
-            }}
-            style={({ pressed }) => [
-              styles.terminateAllButton,
-              {
-                backgroundColor: pressed ? colors.surfaceSecondary : colors.surface,
-              },
-            ]}
-          >
-            <MaterialIcons name="delete-sweep" size={24} color={colors.error} />
-            <Text style={[styles.terminateAllText, { color: colors.error }]}>
-              Terminate All Other Sessions
-            </Text>
-          </Pressable>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-    includeFontPadding: false,
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 15,
-    marginTop: 12,
-    includeFontPadding: false,
-  },
-  sessionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  sessionLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sessionInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    includeFontPadding: false,
-    marginBottom: 4,
-  },
-  currentBadge: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  deviceType: {
-    fontSize: 14,
-    includeFontPadding: false,
-    marginBottom: 4,
-  },
-  sessionMeta: {
-    marginBottom: 4,
-  },
-  metaText: {
-    fontSize: 13,
-    includeFontPadding: false,
-  },
-  lastActive: {
-    fontSize: 12,
-    includeFontPadding: false,
-  },
-  terminateButton: {
-    padding: 8,
-    borderRadius: 8,
   },
   terminateAllButton: {
     flexDirection: 'row',
