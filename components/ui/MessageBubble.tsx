@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { VoicePlayer } from './VoicePlayer';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const BUBBLE_MAX_W = Math.min(SCREEN_W * 0.72, 300);
 
 interface MessageBubbleProps {
@@ -22,44 +22,82 @@ interface MessageBubbleProps {
 // Full-screen photo viewer
 function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.photoViewerOverlay} onPress={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.mediaViewerOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <Image
           source={{ uri }}
           style={styles.photoViewerImage}
           contentFit="contain"
           transition={200}
         />
-        <Pressable style={styles.photoViewerClose} onPress={onClose}>
-          <MaterialIcons name="close" size={28} color="#fff" />
+        <Pressable style={styles.mediaViewerClose} onPress={onClose} hitSlop={12}>
+          <MaterialIcons name="close" size={26} color="#fff" />
         </Pressable>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
-// Video player inside bubble
-function VideoBubble({ uri, colors }: { uri: string; colors: any }) {
+// Full-screen video viewer
+function VideoViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
+    if (visible) p.play();
   });
 
   return (
-    <View style={styles.videoBubble}>
-      <VideoView
-        player={player}
-        style={styles.videoPlayer}
-        contentFit="cover"
-        allowsFullscreen
-        allowsPictureInPicture={false}
-      />
-    </View>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.mediaViewerOverlay}>
+        <VideoView
+          player={player}
+          style={styles.videoViewerPlayer}
+          contentFit="contain"
+          allowsFullscreen
+          allowsPictureInPicture={false}
+          nativeControls
+        />
+        <Pressable style={styles.mediaViewerClose} onPress={onClose} hitSlop={12}>
+          <MaterialIcons name="close" size={26} color="#fff" />
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+// Inline video bubble — tapping opens fullscreen viewer
+function VideoBubble({ uri, colors, onPress }: { uri: string; colors: any; onPress: () => void }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+    p.pause();
+  });
+
+  return (
+    <Pressable onPress={onPress} style={styles.videoBubbleWrapper}>
+      <View style={styles.videoBubble}>
+        <VideoView
+          player={player}
+          style={styles.videoPlayer}
+          contentFit="cover"
+          allowsFullscreen={false}
+          allowsPictureInPicture={false}
+          nativeControls={false}
+        />
+        {/* Overlay play button */}
+        <View style={styles.videoPlayOverlay}>
+          <View style={styles.videoPlayButton}>
+            <MaterialIcons name="play-arrow" size={32} color="#fff" />
+          </View>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
 export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReactionPress }: MessageBubbleProps) {
   const scale = useSharedValue(1);
   const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
+  const [videoViewerVisible, setVideoViewerVisible] = useState(false);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -78,8 +116,11 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
     }, {} as Record<string, string[]>);
   };
 
+  // Detect GIFs
+  const isGif = (url?: string) => url?.toLowerCase().includes('.gif') || message.type === 'gif';
+
   const isMediaOnly =
-    (message.type === 'photo' || message.type === 'video') && !message.content;
+    (message.type === 'photo' || message.type === 'video' || message.type === 'gif') && !message.content;
 
   const renderContent = () => {
     // Voice message
@@ -99,6 +140,38 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
           colors={colors}
           isOutgoing={isOutgoing}
         />
+      );
+    }
+
+    // GIF message
+    if (message.type === 'gif' || isGif(message.mediaUrl)) {
+      if (!message.mediaUrl) {
+        return (
+          <View style={[styles.mediaPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
+            <MaterialIcons name="gif" size={40} color={colors.textSecondary} />
+          </View>
+        );
+      }
+      return (
+        <>
+          <Pressable onPress={() => setPhotoViewerVisible(true)}>
+            <Image
+              source={{ uri: message.mediaUrl }}
+              style={styles.mediaImage}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
+            <View style={[styles.gifBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.gifBadgeText}>GIF</Text>
+            </View>
+          </Pressable>
+          <PhotoViewer
+            uri={message.mediaUrl}
+            visible={photoViewerVisible}
+            onClose={() => setPhotoViewerVisible(false)}
+          />
+        </>
       );
     }
 
@@ -147,10 +220,19 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
       }
       return (
         <>
-          <VideoBubble uri={message.mediaUrl} colors={colors} />
+          <VideoBubble
+            uri={message.mediaUrl}
+            colors={colors}
+            onPress={() => setVideoViewerVisible(true)}
+          />
           {message.content ? (
             <Text style={[styles.messageText, { color: colors.text }]}>{message.content}</Text>
           ) : null}
+          <VideoViewer
+            uri={message.mediaUrl}
+            visible={videoViewerVisible}
+            onClose={() => setVideoViewerVisible(false)}
+          />
         </>
       );
     }
@@ -198,8 +280,8 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
     >
       <Pressable
         onLongPress={onLongPress}
-        onPressIn={() => scale.value = withSpring(0.96, { damping: 15 })}
-        onPressOut={() => scale.value = withSpring(1, { damping: 15 })}
+        onPressIn={() => { scale.value = withSpring(0.96, { damping: 15 }); }}
+        onPressOut={() => { scale.value = withSpring(1, { damping: 15 }); }}
         style={[
           styles.bubble,
           isMediaOnly && styles.mediaBubble,
@@ -285,7 +367,7 @@ const styles = StyleSheet.create({
   readIcon: {
     marginLeft: 2,
   },
-  // Photo
+  // Photo/GIF
   mediaImage: {
     width: BUBBLE_MAX_W - 8,
     height: BUBBLE_MAX_W - 8,
@@ -300,6 +382,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  gifBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gifBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
   loadingMedia: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,15 +407,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     includeFontPadding: false,
   },
-  // Video
-  videoBubble: {
+  // Video bubble (inline)
+  videoBubbleWrapper: {
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 4,
   },
-  videoPlayer: {
+  videoBubble: {
+    position: 'relative',
     width: BUBBLE_MAX_W - 8,
     height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  videoPlayer: {
+    width: '100%',
+    height: '100%',
+  },
+  videoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  videoPlayButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Fullscreen viewer
+  mediaViewerOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerImage: {
+    width: SCREEN_W,
+    height: SCREEN_H,
+  },
+  videoViewerPlayer: {
+    width: SCREEN_W,
+    height: SCREEN_H * 0.75,
+  },
+  mediaViewerClose: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // File
   fileBubble: {
@@ -370,24 +514,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     includeFontPadding: false,
-  },
-  // Photo viewer
-  photoViewerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  photoViewerImage: {
-    width: '100%',
-    height: '80%',
-  },
-  photoViewerClose: {
-    position: 'absolute',
-    top: 48,
-    right: 16,
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
   },
 });

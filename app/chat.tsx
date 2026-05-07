@@ -336,7 +336,7 @@ export default function ChatScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
-        <Avatar uri={chat.avatar} username={chat.name} size={40} isOnline colors={colors} />
+        <Avatar uri={chat.avatar} username={chat.name} size={40} colors={colors} />
         <View style={styles.headerInfo}>
           <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{chat.name}</Text>
           <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>

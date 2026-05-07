@@ -68,29 +68,34 @@ export async function updateUserStatus(userId: string, isOnline: boolean): Promi
 
 async function createSession(userId: string): Promise<void> {
   try {
-    const deviceName = Device.deviceName || 'Unknown Device';
+    const storageModule = await import('@/services/storage');
+    
+    // Check if we already have a valid session ID stored locally
+    const existingSessionId = await storageModule.getSessionId();
+    if (existingSessionId) {
+      // Verify it still exists on server
+      const { data: existing } = await supabase
+        .from('openflou_sessions')
+        .select('id')
+        .eq('id', existingSessionId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (existing?.id) {
+        // Session is valid — just refresh activity
+        await supabase
+          .from('openflou_sessions')
+          .update({ last_active: new Date().toISOString() })
+          .eq('id', existing.id);
+        console.log('✅ Reused existing session:', existing.id);
+        return;
+      }
+    }
+
+    // Create new session
+    const deviceName = Device.deviceName || `Device_${Date.now()}`;
     const deviceType = Device.modelName || 'Unknown Model';
     const platform = Device.osName || 'Unknown OS';
-
-    // Check if a session for this device already exists — prevent duplicates
-    const { data: existing } = await supabase
-      .from('openflou_sessions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('device_name', deviceName)
-      .maybeSingle();
-
-    if (existing?.id) {
-      // Reuse existing session — just update last_active
-      await supabase
-        .from('openflou_sessions')
-        .update({ last_active: new Date().toISOString() })
-        .eq('id', existing.id);
-      const { saveSessionId } = await import('@/services/storage');
-      await saveSessionId(existing.id);
-      console.log('✅ Reused existing session:', existing.id);
-      return;
-    }
 
     let ipAddress = 'Unknown';
     try {
@@ -109,9 +114,10 @@ async function createSession(userId: string): Promise<void> {
     }).select('id').single();
 
     if (data?.id && !error) {
-      const { saveSessionId } = await import('@/services/storage');
-      await saveSessionId(data.id);
+      await storageModule.saveSessionId(data.id);
       console.log('✅ Created new session:', data.id);
+    } else if (error) {
+      console.error('❌ Session insert error:', error);
     }
   } catch (error) {
     console.error('Create session error:', error);
@@ -155,7 +161,7 @@ export async function deleteSession(sessionId: string) {
   }
 }
 
-export async function deleteAllOtherSessions(userId: string, currentDeviceName: string) {
+export async function deleteAllOtherSessions(userId: string, currentSessionId: string) {
   try {
     console.log('🗑️ API: Deleting all other sessions for user:', userId);
     
@@ -163,7 +169,7 @@ export async function deleteAllOtherSessions(userId: string, currentDeviceName: 
       .from('openflou_sessions')
       .delete()
       .eq('user_id', userId)
-      .neq('device_name', currentDeviceName);
+      .neq('id', currentSessionId);
 
     if (error) {
       console.error('❌ Delete all sessions error:', error);
@@ -180,13 +186,15 @@ export async function deleteAllOtherSessions(userId: string, currentDeviceName: 
 
 export async function updateSessionActivity(userId: string): Promise<void> {
   try {
-    const deviceName = Device.deviceName || 'Unknown Device';
+    const storageModule = await import('@/services/storage');
+    const sessionId = await storageModule.getSessionId();
+    if (!sessionId) return;
     
     await supabase
       .from('openflou_sessions')
       .update({ last_active: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('device_name', deviceName);
+      .eq('id', sessionId)
+      .eq('user_id', userId);
   } catch (error) {
     console.error('Update session activity error:', error);
   }
