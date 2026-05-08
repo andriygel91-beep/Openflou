@@ -1,48 +1,11 @@
-name: Build APK Release (48th Attempt - No JitPack Strategy)
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 🏗 Install pnpm
-        run: npm install -g pnpm
-
-      - name: 🏗 Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 📦 Install Dependencies
+      - name: 🔧 Optimized Patch & Shrink
         run: |
-          pnpm config set shamefully-hoist true
-          pnpm install --no-frozen-lockfile
-
-      - name: 🏗 Prebuild Android
-        run: npx expo prebuild --platform android --no-install
-
-      - name: 🔧 Global Offline Repository Patch
-        run: |
-          # 1. Настройка системных свойств для ускорения падения при сетевых ошибках
+          # 1. Тайм-ауты и исправление Stripe (как у тебя было)
           echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
-          
-          # 2. Очистка всех build.gradle от знака "+" для Stripe
-          # Это предотвращает обращение к серверам за "новой" версией
           find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:+/com.stripe:financial-connections:21.12.0/g' {} +
 
-          # 3. Полная перезапись build.gradle БЕЗ JITPACK
+          # 2. Перезапись основного build.gradle
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -53,10 +16,7 @@ jobs:
                   ndkVersion = "27.0.12077973"
                   kotlinVersion = "2.0.0"
               }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
               dependencies {
                   classpath('com.android.tools.build:gradle:8.8.2')
                   classpath('com.facebook.react:react-native-gradle-plugin')
@@ -64,33 +24,29 @@ jobs:
                   classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.0")
               }
           }
-
           allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  // JitPack полностью удален. Если он понадобится другой библиотеке, 
-                  // мы увидим ошибку мгновенно, а не через 10 минут.
-              }
-              
+              repositories { google(); mavenCentral() }
               configurations.all {
                   resolutionStrategy {
-                      // Принудительно используем стабильную версию для основных проблемных модулей
                       force 'com.stripe:stripe-android:21.12.0'
                       force 'com.stripe:financial-connections:21.12.0'
-                      
-                      // Не даем динамическим версиям провоцировать сетевые запросы
-                      cacheDynamicVersionsFor 0, 'seconds'
-                      cacheChangingModulesFor 0, 'seconds'
                   }
               }
           }
           EOF
 
-          # 4. Оптимизация приложения
+          # 3. МАГИЯ УМЕНЬШЕНИЯ РАЗМЕРА (Правка app/build.gradle)
           FILE_APP="android/app/build.gradle"
-          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
-          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
+          
+          # Оставляем только современную архитектуру (минус ~40-60МБ)
+          sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
+          
+          # Включаем удаление мертвого кода и ресурсов (минус ~100МБ+)
+          # Ищем блок release и вставляем туда настройки сжатия
+          sed -i '/release {/a \            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' $FILE_APP
+
+          # Включаем Hermes (движок JS), если он вдруг выключен — это критично для размера
+          sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
 
       - name: 🚀 Build Release APK
         env:
@@ -99,11 +55,6 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
-
-      - name: 📂 Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenFlou-Build-48
-          path: android/app/build/outputs/apk/release/app-release.apk
+          # Обязательно clean, чтобы не потянуть старый мусор в сборку
+          ./gradlew clean assembleRelease
           
