@@ -35,32 +35,37 @@ jobs:
         run: |
           FILE_APP="android/app/build.gradle"
           
-          # 1. Фикс Stripe
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
+          # 1. Создаем правила исключения для R8, чтобы он не удалял Stripe и Камеру
+          cat <<EOF > android/app/proguard-rules.pro
+          -keep class com.stripe.** { *; }
+          -keep class com.facebook.react.** { *; }
+          -keep class androidx.camera.** { *; }
+          -dontwarn com.stripe.**
+          -dontwarn androidx.camera.**
+          EOF
 
-          # 2. Оставляем только современную архитектуру (64-бит)
+          # 2. Оставляем только 64-бит (современные телефоны)
           sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
 
-          # 3. Полная замена блока release на оптимизированный (без вызова методов)
-          # Это удалит старый блок и вставит наш с включенным сжатием
-          sed -i '/release {/,/}/c\        release {\n            minifyEnabled true\n            shrinkResources true\n            proguardFiles "proguard-rules.pro"\n        }' $FILE_APP
+          # 3. Настраиваем сжатие так, чтобы оно использовало наш файл правил
+          sed -i '/release {/,/}/c\        release {\n            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"\n        }' $FILE_APP
           
-          # 4. Принудительный Hermes
+          # 4. Включаем Hermes и фиксим Stripe
           sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
 
       - name: 🚀 Build Release APK
         env:
           NODE_ENV: production
-          _JAVA_OPTIONS: "-Xmx8g -XX:MaxMetaspaceSize=1g"
+          _JAVA_OPTIONS: "-Xmx8g"
         run: |
           cd android
           chmod +x gradlew
-          # Собираем с запасом памяти
           ./gradlew clean assembleRelease -Dorg.gradle.jvmargs="-Xmx8g -XX:MaxMetaspaceSize=1g"
 
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Clean-Modern-APK
+          name: Optimized-Build-Success
           path: android/app/build/outputs/apk/release/app-release.apk
           
