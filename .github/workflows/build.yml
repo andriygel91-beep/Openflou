@@ -1,19 +1,57 @@
-      - name: 🔧 Modern Phones Only Patch (2019+)
+name: Build Optimized APK
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🏗 Install pnpm
+        run: npm install -g pnpm
+
+      - name: 🏗 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pnpm config set shamefully-hoist true
+          pnpm install --no-frozen-lockfile
+
+      - name: 🏗 Prebuild Android
+        run: npx expo prebuild --platform android --no-install
+
+      - name: 🔧 Patch and Shrink
         run: |
           FILE_APP="android/app/build.gradle"
-
-          # 1. Принудительно ставим фильтр только на современную 64-битную архитектуру
-          # Это сразу срежет ~150МБ, так как не будет v7a, x86 и x86_64
-          echo "" >> $FILE_APP
+          # Принудительно отключаем другие архитектуры и включаем сжатие
           echo "android.defaultConfig.ndk.abiFilters 'arm64-v8a'" >> $FILE_APP
-
-          # 2. Включаем сжатие кода и ресурсов
           echo "android.buildTypes.release.minifyEnabled = true" >> $FILE_APP
           echo "android.buildTypes.release.shrinkResources = true" >> $FILE_APP
-          echo "android.buildTypes.release.proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'" >> $FILE_APP
+          # Фикс для Stripe, который ты использовал
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
 
-          # 3. Включаем Hermes (движок для React Native), если он еще не включен
-          sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
+      - name: 🚀 Build Release APK
+        env:
+          NODE_ENV: production
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew clean assembleRelease
 
-          echo "✅ Оптимизация под смартфоны 2019+ завершена"
+      - name: 📂 Upload Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clean-Modern-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
           
