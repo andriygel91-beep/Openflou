@@ -1,98 +1,19 @@
-name: Build APK Release (Optimized)
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 🏗 Install pnpm
-        run: npm install -g pnpm
-
-      - name: 🏗 Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 📦 Install Dependencies
+      - name: 🔧 Modern Phones Only Patch (2019+)
         run: |
-          pnpm config set shamefully-hoist true
-          pnpm install --no-frozen-lockfile
-
-      - name: 🏗 Prebuild Android
-        run: npx expo prebuild --platform android --no-install
-
-      - name: 🔧 Optimized Patch & Shrink
-        run: |
-          # 1. Тайм-ауты и исправление Stripe
-          echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
-          echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
-
-          # 2. Перезапись основного build.gradle (без JitPack)
-          cat <<EOF > android/build.gradle
-          buildscript {
-              ext {
-                  buildToolsVersion = "35.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 35
-                  targetSdkVersion = 35
-                  ndkVersion = "27.0.12077973"
-                  kotlinVersion = "2.0.0"
-              }
-              repositories { google(); mavenCentral() }
-              dependencies {
-                  classpath('com.android.tools.build:gradle:8.8.2')
-                  classpath('com.facebook.react:react-native-gradle-plugin')
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0")
-                  classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.0")
-              }
-          }
-          allprojects {
-              repositories { google(); mavenCentral() }
-              configurations.all {
-                  resolutionStrategy {
-                      force 'com.stripe:stripe-android:21.12.0'
-                      force 'com.stripe:financial-connections:21.12.0'
-                  }
-              }
-          }
-          EOF
-
-          # 3. Настройка сжатия в app/build.gradle
           FILE_APP="android/app/build.gradle"
-          
-          # Оставляем только arm64-v8a
-          sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
-          
-          # Включаем minifyEnabled и shrinkResources
-          sed -i 's/minifyEnabled false/minifyEnabled true/g' $FILE_APP
-          sed -i '/minifyEnabled true/a \            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' $FILE_APP
 
-          # Включаем Hermes
+          # 1. Принудительно ставим фильтр только на современную 64-битную архитектуру
+          # Это сразу срежет ~150МБ, так как не будет v7a, x86 и x86_64
+          echo "" >> $FILE_APP
+          echo "android.defaultConfig.ndk.abiFilters 'arm64-v8a'" >> $FILE_APP
+
+          # 2. Включаем сжатие кода и ресурсов
+          echo "android.buildTypes.release.minifyEnabled = true" >> $FILE_APP
+          echo "android.buildTypes.release.shrinkResources = true" >> $FILE_APP
+          echo "android.buildTypes.release.proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'" >> $FILE_APP
+
+          # 3. Включаем Hermes (движок для React Native), если он еще не включен
           sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
 
-      - name: 🚀 Build Release APK
-        env:
-          NODE_ENV: production
-          _JAVA_OPTIONS: "-Xmx4g"
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew clean assembleRelease
-
-      - name: 📂 Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenFlou-Optimized-Build
-          path: android/app/build/outputs/apk/release/app-release.apk
+          echo "✅ Оптимизация под смартфоны 2019+ завершена"
           
