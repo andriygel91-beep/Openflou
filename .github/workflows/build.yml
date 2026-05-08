@@ -1,11 +1,44 @@
+name: Build APK Release (Optimized)
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🏗 Install pnpm
+        run: npm install -g pnpm
+
+      - name: 🏗 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pnpm config set shamefully-hoist true
+          pnpm install --no-frozen-lockfile
+
+      - name: 🏗 Prebuild Android
+        run: npx expo prebuild --platform android --no-install
+
       - name: 🔧 Optimized Patch & Shrink
         run: |
-          # 1. Тайм-ауты и исправление Stripe (как у тебя было)
+          # 1. Тайм-ауты и исправление Stripe
           echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
           echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
           find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
 
-          # 2. Перезапись основного build.gradle
+          # 2. Перезапись основного build.gradle (без JitPack)
           cat <<EOF > android/build.gradle
           buildscript {
               ext {
@@ -35,17 +68,17 @@
           }
           EOF
 
-          # 3. МАГИЯ УМЕНЬШЕНИЯ РАЗМЕРА (Правка app/build.gradle)
+          # 3. Настройка сжатия в app/build.gradle
           FILE_APP="android/app/build.gradle"
           
-          # Оставляем только современную архитектуру (минус ~40-60МБ)
+          # Оставляем только arm64-v8a
           sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
           
-          # Включаем удаление мертвого кода и ресурсов (минус ~100МБ+)
-          # Ищем блок release и вставляем туда настройки сжатия
-          sed -i '/release {/a \            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' $FILE_APP
+          # Включаем minifyEnabled и shrinkResources
+          sed -i 's/minifyEnabled false/minifyEnabled true/g' $FILE_APP
+          sed -i '/minifyEnabled true/a \            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' $FILE_APP
 
-          # Включаем Hermes (движок JS), если он вдруг выключен — это критично для размера
+          # Включаем Hermes
           sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
 
       - name: 🚀 Build Release APK
@@ -55,6 +88,11 @@
         run: |
           cd android
           chmod +x gradlew
-          # Обязательно clean, чтобы не потянуть старый мусор в сборку
           ./gradlew clean assembleRelease
+
+      - name: 📂 Upload Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlou-Optimized-Build
+          path: android/app/build/outputs/apk/release/app-release.apk
           
