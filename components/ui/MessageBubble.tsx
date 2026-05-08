@@ -14,6 +14,7 @@ const BUBBLE_MAX_W = Math.min(SCREEN_W * 0.72, 300);
 interface MessageBubbleProps {
   message: Message;
   isOutgoing: boolean;
+  senderName?: string; // Only in groups/channels — undefined in DMs
   colors: any;
   onLongPress?: () => void;
   onReactionPress?: (emoji: string) => void;
@@ -94,7 +95,7 @@ function VideoBubble({ uri, colors, onPress }: { uri: string; colors: any; onPre
   );
 }
 
-export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReactionPress }: MessageBubbleProps) {
+export function MessageBubble({ message, isOutgoing, senderName, colors, onLongPress, onReactionPress }: MessageBubbleProps) {
   const scale = useSharedValue(1);
   const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
   const [videoViewerVisible, setVideoViewerVisible] = useState(false);
@@ -293,6 +294,12 @@ export function MessageBubble({ message, isOutgoing, colors, onLongPress, onReac
           },
         ]}
       >
+        {/* Show sender name in groups for incoming messages */}
+        {!isOutgoing && senderName ? (
+          <Text style={[styles.senderName, { color: colors.primary }]} numberOfLines={1}>
+            {senderName}
+          </Text>
+        ) : null}
         {renderContent()}
         <View style={[styles.timeContainer, { justifyContent: isOutgoing ? 'flex-end' : 'flex-start' }]}>
           {message.isEdited ? (
@@ -366,6 +373,12 @@ const styles = StyleSheet.create({
   },
   readIcon: {
     marginLeft: 2,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 3,
+    includeFontPadding: false,
   },
   // Photo/GIF
   mediaImage: {

@@ -81,19 +81,37 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (currentUser) {
       createSavedMessagesChat();
+      // Update session activity
       api.updateSessionActivity(currentUser.id);
-      // Validate session every 30s — if session was deleted from another device, log out
+      
+      // Validate session every 30s — if session was deleted remotely, log out
       const sessionCheck = setInterval(async () => {
-        const sessionId = await storage.getSessionId();
-        if (sessionId) {
+        try {
+          const sessionId = await storage.getSessionId();
+          if (!sessionId) {
+            console.log('No session ID stored, logging out');
+            await logout();
+            return;
+          }
           const isValid = await api.checkSessionExists(currentUser.id, sessionId);
           if (!isValid) {
             console.log('Session invalidated remotely, logging out');
             await logout();
           }
+        } catch (e) {
+          console.error('Session check error:', e);
         }
       }, 30000);
-      return () => clearInterval(sessionCheck);
+
+      // Update session activity every 60s
+      const activityUpdate = setInterval(() => {
+        api.updateSessionActivity(currentUser.id);
+      }, 60000);
+
+      return () => {
+        clearInterval(sessionCheck);
+        clearInterval(activityUpdate);
+      };
     }
   }, [currentUser?.id]);
 

@@ -23,6 +23,22 @@ export default function AuthScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Password strength
+  const getPasswordStrength = (pass: string): { level: number; label: string; color: string } => {
+    if (!pass) return { level: 0, label: '', color: 'transparent' };
+    let score = 0;
+    if (pass.length >= 6) score++;
+    if (pass.length >= 10) score++;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/[0-9]/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+    if (score <= 1) return { level: 1, label: 'Weak', color: '#ef4444' };
+    if (score === 2) return { level: 2, label: 'Fair', color: '#f59e0b' };
+    if (score === 3) return { level: 3, label: 'Good', color: '#3b82f6' };
+    return { level: 4, label: 'Strong', color: '#10b981' };
+  };
+  const passwordStrength = getPasswordStrength(password);
+
   // Telegram login modal
   const [showTelegramModal, setShowTelegramModal] = useState(false);
   const [telegramToken, setTelegramToken] = useState('');
@@ -197,6 +213,30 @@ export default function AuthScreen() {
                 editable={!loading}
               />
             </View>
+
+            {isSignUp && password.length > 0 && (
+              <View style={styles.strengthContainer}>
+                <View style={styles.strengthBars}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.strengthBar,
+                        {
+                          backgroundColor:
+                            i <= passwordStrength.level
+                              ? passwordStrength.color
+                              : colors.surfaceSecondary,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={[styles.strengthLabel, { color: passwordStrength.color }]}>
+                  {passwordStrength.label}
+                </Text>
+              </View>
+            )}
 
             {isSignUp && (
               <View style={styles.inputContainer}>
@@ -428,6 +468,29 @@ const styles = StyleSheet.create({
   telegramButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    includeFontPadding: false,
+  },
+  strengthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  strengthBars: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  strengthBar: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+  },
+  strengthLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    width: 50,
+    textAlign: 'right',
     includeFontPadding: false,
   },
   toggleContainer: {

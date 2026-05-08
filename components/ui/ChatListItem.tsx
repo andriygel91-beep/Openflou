@@ -43,11 +43,19 @@ export function ChatListItem({ chat, colors, t, currentUserId, onPress }: ChatLi
     if (!chat.lastMessage) return '';
     
     const isOutgoing = chat.lastMessage.senderId === currentUserId;
-    const prefix = isOutgoing ? `${t.you}: ` : '';
+    // For groups/channels show sender name, for DMs show 'You:' or nothing
+    let prefix = '';
+    if (isOutgoing) {
+      prefix = `You: `;
+    } else if (chat.type === 'group' || chat.type === 'channel') {
+      // Don't add prefix — sender name resolved separately would need extra state
+      prefix = '';
+    }
     
-    if (chat.lastMessage.type === 'photo') return `${prefix}${t.photo}`;
-    if (chat.lastMessage.type === 'video') return `${prefix}${t.video}`;
-    if (chat.lastMessage.type === 'file') return `${prefix}${t.file}`;
+    if (chat.lastMessage.type === 'photo') return `${prefix}📷 Photo`;
+    if (chat.lastMessage.type === 'video') return `${prefix}🎥 Video`;
+    if (chat.lastMessage.type === 'voice') return `${prefix}🎤 Voice`;
+    if (chat.lastMessage.type === 'file') return `${prefix}📎 ${chat.lastMessage.fileName || 'File'}`;
     
     return `${prefix}${chat.lastMessage.content}`;
   };

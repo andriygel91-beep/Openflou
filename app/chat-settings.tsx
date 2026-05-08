@@ -32,7 +32,7 @@ export default function ChatSettingsScreen() {
   const isAdmin = chat?.admins?.includes(currentUser?.id || '');
   const canManage = isCreator || isAdmin;
 
-  // Load participants ONCE when the screen opens (not on every render/chat change)
+  // Load participants (including for DMs, to find the other user for block action)
   useEffect(() => {
     if (chat && !loadedRef.current) {
       loadedRef.current = true;
@@ -153,6 +153,22 @@ export default function ChatSettingsScreen() {
           const { error } = await updateChat({ ...chat, creatorId: userId, admins: updatedAdmins });
           if (error) showAlert('Error', error);
           else { showAlert('Ownership transferred'); loadedRef.current = false; await loadParticipants(); }
+        },
+      },
+    ]);
+  }
+
+  // ── Block user (DM only) ──
+  async function handleBlockUserDM(userId: string, username: string, avatar?: string) {
+    if (!currentUser) return;
+    showAlert('Block User?', `You will no longer see messages from ${username}`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Block', style: 'destructive',
+        onPress: async () => {
+          await storage.blockUser(currentUser.id, userId, username, avatar);
+          showAlert('Blocked', `${username} has been blocked`);
+          router.replace('/(tabs)');
         },
       },
     ]);
@@ -391,18 +407,35 @@ export default function ChatSettingsScreen() {
             </Pressable>
           )}
 
-          {/* Direct chat: delete for both */}
-          {isDirectChat && (
-            <Pressable
-              onPress={handleDeleteDirect}
-              style={({ pressed }) => [styles.settingItem, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <View style={[styles.settingIcon, { backgroundColor: colors.error + '22' }]}>
-                <MaterialIcons name="delete-forever" size={22} color={colors.error} />
-              </View>
-              <Text style={[styles.settingText, { color: colors.error }]}>Delete Conversation</Text>
-            </Pressable>
-          )}
+          {/* Direct chat: block + delete */}
+          {isDirectChat && (() => {
+            const otherUserId = chat.participants.find((pid) => pid !== currentUser?.id);
+            const otherUser = participants.find((p) => p.id === otherUserId);
+            return (
+              <>
+                {otherUser ? (
+                  <Pressable
+                    onPress={() => handleBlockUserDM(otherUser.id, otherUser.display_name || otherUser.username, otherUser.avatar)}
+                    style={({ pressed }) => [styles.settingItem, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <View style={[styles.settingIcon, { backgroundColor: colors.error + '22' }]}>
+                      <MaterialIcons name="block" size={22} color={colors.error} />
+                    </View>
+                    <Text style={[styles.settingText, { color: colors.error }]}>Block User</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={handleDeleteDirect}
+                  style={({ pressed }) => [styles.settingItem, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <View style={[styles.settingIcon, { backgroundColor: colors.error + '22' }]}>
+                    <MaterialIcons name="delete-forever" size={22} color={colors.error} />
+                  </View>
+                  <Text style={[styles.settingText, { color: colors.error }]}>Delete Conversation</Text>
+                </Pressable>
+              </>
+            );
+          })()}
         </View>
       </ScrollView>
 

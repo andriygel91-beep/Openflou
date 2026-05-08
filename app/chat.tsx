@@ -1,5 +1,5 @@
 // Openflou Chat Screen
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   Pressable, KeyboardAvoidingView, Platform,
@@ -14,6 +14,7 @@ import { Message } from '@/types';
 import { generateMessageId, encryptMessage } from '@/services/encryption';
 import { StatusBar } from 'expo-status-bar';
 import { uploadMedia } from '@/services/mediaUpload';
+import * as api from '@/services/api';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,8 +37,11 @@ export default function ChatScreen() {
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  // Cache for user display names to fix "shows yourself" bug
+  const [userCache, setUserCache] = useState<Record<string, { name: string; avatar?: string }>>({});
 
   const flatListRef = useRef<FlatList>(null);
+  const pendingIdsRef = useRef<Set<string>>(new Set());
 
   const chat = chats.find((c) => c.id === id);
   const isAdmin = chat?.admins?.includes(currentUser?.id || '');
@@ -48,11 +52,30 @@ export default function ChatScreen() {
     isAdmin ||
     isCreator;
 
-  // Auto-refresh messages
+  // Resolve user display info to fix "shows yourself" bug
+  const resolveUser = useCallback(async (userId: string) => {
+    if (!userId || userCache[userId]) return;
+    if (userId === currentUser?.id) {
+      setUserCache((prev) => ({
+        ...prev,
+        [userId]: { name: currentUser?.display_name || currentUser?.username || 'You', avatar: currentUser?.avatar },
+      }));
+      return;
+    }
+    const user = await api.getUserById(userId);
+    if (user) {
+      setUserCache((prev) => ({
+        ...prev,
+        [userId]: { name: user.display_name || user.username, avatar: user.avatar },
+      }));
+    }
+  }, [currentUser?.id, userCache]);
+
+  // Auto-refresh messages with 1s polling
   useEffect(() => {
     if (!id) return;
     loadMessages();
-    const interval = setInterval(loadMessages, 800);
+    const interval = setInterval(loadMessages, 1000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -66,21 +89,37 @@ export default function ChatScreen() {
     }
   }, [chat?.pinnedMessageId, messages]);
 
+  // Resolve unknown senders
+  useEffect(() => {
+    const unresolved = messages
+      .map((m) => m.senderId)
+      .filter((sid) => sid && !userCache[sid]);
+    const unique = [...new Set(unresolved)];
+    unique.forEach(resolveUser);
+  }, [messages.length]);
+
   async function loadMessages() {
     if (!id) return;
-    const loaded = await getMessagesForChat(id);
-    setMessages((prev) => {
-      // Keep optimistic messages whose ID hasn't appeared in server results yet
-      const serverIds = new Set(loaded.map((m) => m.id));
-      const pendingOptimistic = prev.filter(
-        (m) => m.id.startsWith('opt_') && !serverIds.has(m.id)
-      );
-      // Merge: server messages + still-pending optimistic ones, sorted by timestamp
-      const merged = [...loaded, ...pendingOptimistic].sort(
-        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-      return merged;
-    });
+    try {
+      const loaded = await getMessagesForChat(id);
+      setMessages((prev) => {
+        const serverIds = new Set(loaded.map((m) => m.id));
+        // Remove from pendingIds any that now exist on server
+        for (const sid of serverIds) {
+          pendingIdsRef.current.delete(sid);
+        }
+        // Keep optimistic messages not yet on server
+        const pendingOptimistic = prev.filter(
+          (m) => m.id.startsWith('opt_') && !serverIds.has(m.id)
+        );
+        const merged = [...loaded, ...pendingOptimistic].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        return merged;
+      });
+    } catch (e) {
+      // ignore polling errors silently
+    }
   }
 
   // ── Text send ──
@@ -99,6 +138,8 @@ export default function ChatScreen() {
     setInputText('');
 
     const optimisticId = `opt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    pendingIdsRef.current.add(optimisticId);
+
     const msg: Message = {
       id: optimisticId,
       chatId: id,
@@ -117,6 +158,7 @@ export default function ChatScreen() {
     const { error } = await sendMessage(msg);
     if (error) {
       showAlert(error);
+      pendingIdsRef.current.delete(optimisticId);
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
     }
   }
@@ -130,8 +172,11 @@ export default function ChatScreen() {
     if (!currentUser || !id) return;
     setUploadingMedia(true);
 
+    const optimisticId = `opt_${Date.now()}`;
+    pendingIdsRef.current.add(optimisticId);
+
     const optimistic: Message = {
-      id: `opt_${Date.now()}`,
+      id: optimisticId,
       chatId: id,
       senderId: currentUser.id,
       content: '',
@@ -150,16 +195,20 @@ export default function ChatScreen() {
 
     if (!uploadedUrl) {
       showAlert(`Failed to upload ${type}`);
+      pendingIdsRef.current.delete(optimisticId);
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       return;
     }
 
     const real: Message = { ...optimistic, id: generateMessageId(), mediaUrl: uploadedUrl };
+    pendingIdsRef.current.delete(optimisticId);
+    pendingIdsRef.current.add(real.id);
     setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? real : m)));
 
     const { error } = await sendMessage(real);
     if (error) {
       showAlert(error);
+      pendingIdsRef.current.delete(real.id);
       setMessages((prev) => prev.filter((m) => m.id !== real.id));
     }
   }
@@ -204,8 +253,11 @@ export default function ChatScreen() {
     if (!currentUser || !id) return;
     setIsRecordingMode(false);
 
+    const optimisticId = `opt_voice_${Date.now()}`;
+    pendingIdsRef.current.add(optimisticId);
+
     const optimistic: Message = {
-      id: `opt_voice_${Date.now()}`,
+      id: optimisticId,
       chatId: id,
       senderId: currentUser.id,
       content: '',
@@ -222,11 +274,13 @@ export default function ChatScreen() {
     const uploadedUrl = await uploadMedia(uri, currentUser.id, 'voice');
     if (!uploadedUrl) {
       showAlert('Failed to upload voice message');
+      pendingIdsRef.current.delete(optimisticId);
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       return;
     }
 
     const real: Message = { ...optimistic, id: generateMessageId(), mediaUrl: uploadedUrl };
+    pendingIdsRef.current.delete(optimisticId);
     setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? real : m)));
 
     const { error } = await sendMessage(real);
@@ -272,7 +326,6 @@ export default function ChatScreen() {
         text: 'Delete',
         style: 'destructive' as const,
         onPress: async () => {
-          // handled via server — just remove from local for now
           setMessages((prev) => prev.filter((m) => m.id !== message.id));
         },
       });
@@ -319,6 +372,13 @@ export default function ChatScreen() {
     await loadMessages();
   }
 
+  // Get the display name for a message sender (fixes "shows yourself" bug)
+  function getSenderName(senderId: string): string {
+    if (senderId === currentUser?.id) return '';
+    const cached = userCache[senderId];
+    return cached?.name || '';
+  }
+
   if (!chat) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -326,6 +386,8 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
+
+  const isGroup = chat.type === 'group' || chat.type === 'channel';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.chatBackground }]} edges={['top']}>
@@ -340,7 +402,7 @@ export default function ChatScreen() {
         <View style={styles.headerInfo}>
           <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{chat.name}</Text>
           <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>
-            {uploadingMedia ? 'Uploading...' : t.online}
+            {uploadingMedia ? 'Uploading...' : isGroup ? `${chat.participants.length} members` : t.online}
           </Text>
         </View>
         <Pressable
@@ -388,6 +450,7 @@ export default function ChatScreen() {
             <MessageBubble
               message={item}
               isOutgoing={item.senderId === currentUser?.id}
+              senderName={isGroup ? getSenderName(item.senderId) : undefined}
               colors={colors}
               onLongPress={() => handleMessageLongPress(item)}
               onReactionPress={(emoji) => handleReactionPress(item, emoji)}
@@ -396,6 +459,9 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           onScrollToIndexFailed={() => {}}
+          removeClippedSubviews
+          maxToRenderPerBatch={20}
+          windowSize={10}
         />
 
         {/* Input area */}
