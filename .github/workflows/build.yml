@@ -34,23 +34,24 @@ jobs:
       - name: 🔧 Patch and Shrink
         run: |
           FILE_APP="android/app/build.gradle"
-          
-          # 1. Создаем правила исключения для R8, чтобы он не удалял Stripe и Камеру
+          # 1. Защита для Stripe, Звонков и Камеры
           cat <<EOF > android/app/proguard-rules.pro
           -keep class com.stripe.** { *; }
           -keep class com.facebook.react.** { *; }
           -keep class androidx.camera.** { *; }
+          -keep class org.webrtc.** { *; }
           -dontwarn com.stripe.**
           -dontwarn androidx.camera.**
+          -dontwarn org.webrtc.**
           EOF
 
-          # 2. Оставляем только 64-бит (современные телефоны)
+          # 2. Только современная архитектура
           sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
 
-          # 3. Настраиваем сжатие так, чтобы оно использовало наш файл правил
+          # 3. Настройка сжатия
           sed -i '/release {/,/}/c\        release {\n            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"\n        }' $FILE_APP
           
-          # 4. Включаем Hermes и фиксим Stripe
+          # 4. Включаем Hermes и фикс Stripe
           sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
           find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
 
@@ -66,6 +67,7 @@ jobs:
       - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Optimized-Build-Success
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: Optimized-OpenFlou-APK
+          # Ищем ЛЮБОЙ apk файл в папке билда, чтобы точно не промахнуться
+          path: android/app/build/outputs/apk/release/*.apk
           
