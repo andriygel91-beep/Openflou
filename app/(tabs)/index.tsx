@@ -1,13 +1,17 @@
 // Openflou Chats Tab
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal } from 'react-native';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
-import { ChatListItem, EmptyState } from '@/components';
+import { ChatListItem, EmptyState, Avatar } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { getSupabaseClient } from '@/template';
+import * as api from '@/services/api';
+
+const supabase = getSupabaseClient();
 
 function AnimatedFAB({ icon, onPress, bottom, backgroundColor, iconColor, delay }: any) {
   const scale = useSharedValue(1);
@@ -50,6 +54,8 @@ export default function ChatsTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
+  const [incomingCall, setIncomingCall] = useState<any>(null);
+  const incomingCallRef = useRef<any>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -68,6 +74,50 @@ export default function ChatsTab() {
     
     return () => clearInterval(interval);
   }, [currentUser?.id]);
+
+  // Poll for incoming calls
+  useEffect(() => {
+    if (!currentUser) return;
+    const poll = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from('openflou_calls')
+          .select('*')
+          .eq('callee_id', currentUser.id)
+          .eq('status', 'ringing')
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data && data.id !== incomingCallRef.current?.id) {
+          incomingCallRef.current = data;
+          // Fetch caller info
+          const caller = await api.getUserById(data.caller_id);
+          setIncomingCall({ ...data, caller });
+        } else if (!data && incomingCallRef.current) {
+          incomingCallRef.current = null;
+          setIncomingCall(null);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [currentUser?.id]);
+
+  async function dismissIncomingCall(action: 'decline' | 'answer') {
+    if (!incomingCall) return;
+    if (action === 'decline') {
+      await supabase
+        .from('openflou_calls')
+        .update({ status: 'declined', ended_at: new Date().toISOString() })
+        .eq('id', incomingCall.id);
+      incomingCallRef.current = null;
+      setIncomingCall(null);
+    } else {
+      const call = incomingCall;
+      incomingCallRef.current = null;
+      setIncomingCall(null);
+      router.push(`/call?chatId=${call.chat_id}&callerId=${call.caller_id}&type=${call.type}&role=callee&callId=${call.id}`);
+    }
+  }
 
   const filteredChats = chats.filter((chat) =>
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -154,6 +204,35 @@ export default function ChatsTab() {
           contentContainerStyle={{ paddingBottom: insets.bottom }}
         />
       )}
+
+      {/* Incoming Call Modal */}
+      <Modal visible={!!incomingCall} transparent animationType="slide" onRequestClose={() => dismissIncomingCall('decline')}>
+        <View style={styles.callOverlay}>
+          <View style={[styles.callCard, { backgroundColor: colors.surface }]}>
+            <Avatar uri={incomingCall?.caller?.avatar} username={(incomingCall?.caller as any)?.display_name || incomingCall?.caller?.username || '?'} size={72} colors={colors} />
+            <Text style={[styles.callName, { color: colors.text }]}>
+              {(incomingCall?.caller as any)?.display_name || incomingCall?.caller?.username || 'Unknown'}
+            </Text>
+            <Text style={[styles.callSubtitle, { color: colors.textSecondary }]}>
+              {incomingCall?.type === 'video' ? '📹 Incoming video call' : '📞 Incoming voice call'}
+            </Text>
+            <View style={styles.callActions}>
+              <Pressable
+                onPress={() => dismissIncomingCall('decline')}
+                style={({ pressed }) => [styles.callActionBtn, styles.callDeclineBtn, { opacity: pressed ? 0.8 : 1 }]}
+              >
+                <MaterialIcons name="call-end" size={28} color="#fff" />
+              </Pressable>
+              <Pressable
+                onPress={() => dismissIncomingCall('answer')}
+                style={({ pressed }) => [styles.callActionBtn, styles.callAnswerBtn, { opacity: pressed ? 0.8 : 1 }]}
+              >
+                <MaterialIcons name="call" size={28} color="#fff" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Floating Action Buttons */}
       <AnimatedFAB
@@ -242,4 +321,47 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  callOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 48,
+  },
+  callCard: {
+    width: '90%',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  callName: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 8,
+    includeFontPadding: false,
+  },
+  callSubtitle: {
+    fontSize: 15,
+    includeFontPadding: false,
+  },
+  callActions: {
+    flexDirection: 'row',
+    gap: 48,
+    marginTop: 20,
+  },
+  callActionBtn: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callDeclineBtn: { backgroundColor: '#ef4444' },
+  callAnswerBtn: { backgroundColor: '#22c55e' },
 });

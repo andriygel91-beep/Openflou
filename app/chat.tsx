@@ -37,11 +37,13 @@ export default function ChatScreen() {
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
-  // Cache for user display names to fix "shows yourself" bug
   const [userCache, setUserCache] = useState<Record<string, { name: string; avatar?: string }>>({});
 
   const flatListRef = useRef<FlatList>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
+  // Track if user has scrolled up (to avoid auto-scroll fighting the user)
+  const isAtBottomRef = useRef(true);
+  const messageCountRef = useRef(0);
 
   const chat = chats.find((c) => c.id === id);
   const isAdmin = chat?.admins?.includes(currentUser?.id || '');
@@ -52,7 +54,7 @@ export default function ChatScreen() {
     isAdmin ||
     isCreator;
 
-  // Resolve user display info to fix "shows yourself" bug
+  // Resolve user display info
   const resolveUser = useCallback(async (userId: string) => {
     if (!userId || userCache[userId]) return;
     if (userId === currentUser?.id) {
@@ -66,7 +68,7 @@ export default function ChatScreen() {
     if (user) {
       setUserCache((prev) => ({
         ...prev,
-        [userId]: { name: user.display_name || user.username, avatar: user.avatar },
+        [userId]: { name: (user as any).display_name || user.username, avatar: user.avatar },
       }));
     }
   }, [currentUser?.id, userCache]);
@@ -74,8 +76,8 @@ export default function ChatScreen() {
   // Auto-refresh messages with 1s polling
   useEffect(() => {
     if (!id) return;
-    loadMessages();
-    const interval = setInterval(loadMessages, 1000);
+    loadMessages(true); // initial — force scroll to bottom
+    const interval = setInterval(() => loadMessages(false), 1000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -98,28 +100,43 @@ export default function ChatScreen() {
     unique.forEach(resolveUser);
   }, [messages.length]);
 
-  async function loadMessages() {
+  async function loadMessages(forceScrollToBottom = false) {
     if (!id) return;
     try {
       const loaded = await getMessagesForChat(id);
       setMessages((prev) => {
         const serverIds = new Set(loaded.map((m) => m.id));
-        // Remove from pendingIds any that now exist on server
         for (const sid of serverIds) {
           pendingIdsRef.current.delete(sid);
         }
-        // Keep optimistic messages not yet on server
         const pendingOptimistic = prev.filter(
           (m) => m.id.startsWith('opt_') && !serverIds.has(m.id)
         );
         const merged = [...loaded, ...pendingOptimistic].sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
+
+        // Auto-scroll only if user is at the bottom OR new messages arrived
+        const newCount = merged.length;
+        const hadNewMessages = newCount > messageCountRef.current;
+        messageCountRef.current = newCount;
+
+        if ((isAtBottomRef.current && hadNewMessages) || forceScrollToBottom) {
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: !forceScrollToBottom }), 50);
+        }
+
         return merged;
       });
     } catch (e) {
       // ignore polling errors silently
     }
+  }
+
+  function handleScroll(event: any) {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    // Consider "at bottom" if within 80px of the end
+    isAtBottomRef.current = distanceFromBottom < 80;
   }
 
   // ── Text send ──
@@ -136,6 +153,7 @@ export default function ChatScreen() {
 
     const text = inputText.trim();
     setInputText('');
+    isAtBottomRef.current = true;
 
     const optimisticId = `opt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     pendingIdsRef.current.add(optimisticId);
@@ -152,8 +170,11 @@ export default function ChatScreen() {
       isEdited: false,
     };
 
-    setMessages((prev) => [...prev, msg]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    setMessages((prev) => {
+      const updated = [...prev, msg];
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      return updated;
+    });
 
     const { error } = await sendMessage(msg);
     if (error) {
@@ -171,6 +192,7 @@ export default function ChatScreen() {
   ) {
     if (!currentUser || !id) return;
     setUploadingMedia(true);
+    isAtBottomRef.current = true;
 
     const optimisticId = `opt_${Date.now()}`;
     pendingIdsRef.current.add(optimisticId);
@@ -181,14 +203,17 @@ export default function ChatScreen() {
       senderId: currentUser.id,
       content: '',
       type,
-      mediaUrl: uri, // show local preview immediately
+      mediaUrl: uri,
       timestamp: new Date(),
       isRead: false,
       isEdited: false,
     };
 
-    setMessages((prev) => [...prev, optimistic]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    setMessages((prev) => {
+      const updated = [...prev, optimistic];
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      return updated;
+    });
 
     const uploadedUrl = await uploadMedia(uri, currentUser.id, uploadType);
     setUploadingMedia(false);
@@ -244,14 +269,19 @@ export default function ChatScreen() {
       showAlert(error);
       return;
     }
-    setMessages((prev) => [...prev, msg]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    isAtBottomRef.current = true;
+    setMessages((prev) => {
+      const updated = [...prev, msg];
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      return updated;
+    });
   }
 
   // ── Voice ──
   async function handleVoiceSend(uri: string, duration: number) {
     if (!currentUser || !id) return;
     setIsRecordingMode(false);
+    isAtBottomRef.current = true;
 
     const optimisticId = `opt_voice_${Date.now()}`;
     pendingIdsRef.current.add(optimisticId);
@@ -268,8 +298,11 @@ export default function ChatScreen() {
       isRead: false,
       isEdited: false,
     };
-    setMessages((prev) => [...prev, optimistic]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    setMessages((prev) => {
+      const updated = [...prev, optimistic];
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      return updated;
+    });
 
     const uploadedUrl = await uploadMedia(uri, currentUser.id, 'voice');
     if (!uploadedUrl) {
@@ -293,7 +326,6 @@ export default function ChatScreen() {
   // ── Message actions ──
   function handleMessageLongPress(message: Message) {
     const isOwn = message.senderId === currentUser?.id;
-
     const buttons: any[] = [];
 
     if (message.type === 'text' && isOwn) {
@@ -350,7 +382,7 @@ export default function ChatScreen() {
     const updated: Message = { ...editingMessage, content: editText.trim(), isEdited: true };
     const { error } = await updateMessage(updated);
     if (error) { showAlert(error); return; }
-    await loadMessages();
+    await loadMessages(false);
     setEditingMessage(null);
     setEditText('');
   }
@@ -358,7 +390,7 @@ export default function ChatScreen() {
   async function handleReactionSelect(emoji: string) {
     if (!selectedMessage || !id) return;
     await addReaction(selectedMessage.id, id, emoji);
-    await loadMessages();
+    await loadMessages(false);
   }
 
   async function handleReactionPress(message: Message, emoji: string) {
@@ -369,14 +401,25 @@ export default function ChatScreen() {
     } else {
       await addReaction(message.id, id, emoji);
     }
-    await loadMessages();
+    await loadMessages(false);
   }
 
-  // Get the display name for a message sender (fixes "shows yourself" bug)
   function getSenderName(senderId: string): string {
     if (senderId === currentUser?.id) return '';
     const cached = userCache[senderId];
     return cached?.name || '';
+  }
+
+  // Start a voice call with the other user (DMs only)
+  function handleStartCall(callType: 'voice' | 'video') {
+    if (!chat || !currentUser) return;
+    if (chat.type !== 'direct' && chat.type !== 'private') {
+      showAlert('Calls are only available in direct messages');
+      return;
+    }
+    const otherUserId = chat.participants.find((p) => p !== currentUser.id);
+    if (!otherUserId) return;
+    router.push(`/call?chatId=${chat.id}&calleeId=${otherUserId}&type=${callType}&role=caller`);
   }
 
   if (!chat) {
@@ -388,6 +431,7 @@ export default function ChatScreen() {
   }
 
   const isGroup = chat.type === 'group' || chat.type === 'channel';
+  const isDirect = chat.type === 'direct' || chat.type === 'private';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.chatBackground }]} edges={['top']}>
@@ -395,7 +439,7 @@ export default function ChatScreen() {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Pressable onPress={() => router.back()} style={styles.headerBtn}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <Avatar uri={chat.avatar} username={chat.name} size={40} colors={colors} />
@@ -405,9 +449,20 @@ export default function ChatScreen() {
             {uploadingMedia ? 'Uploading...' : isGroup ? `${chat.participants.length} members` : t.online}
           </Text>
         </View>
+        {/* Call buttons — only for DMs */}
+        {isDirect ? (
+          <>
+            <Pressable onPress={() => handleStartCall('voice')} style={styles.headerBtn}>
+              <MaterialIcons name="call" size={22} color={colors.primary} />
+            </Pressable>
+            <Pressable onPress={() => handleStartCall('video')} style={styles.headerBtn}>
+              <MaterialIcons name="videocam" size={22} color={colors.primary} />
+            </Pressable>
+          </>
+        ) : null}
         <Pressable
           onPress={() => router.push(`/chat-settings?id=${chat.id}`)}
-          style={styles.headerButton}
+          style={styles.headerBtn}
         >
           <MaterialIcons name="info-outline" size={24} color={colors.icon} />
         </Pressable>
@@ -430,7 +485,7 @@ export default function ChatScreen() {
             </Text>
           </View>
           {canManage ? (
-            <Pressable onPress={() => handlePinMessage(pinnedMessage)} style={styles.unpinButton}>
+            <Pressable onPress={() => handlePinMessage(pinnedMessage)} style={styles.unpinBtn}>
               <MaterialIcons name="close" size={18} color={colors.icon} />
             </Pressable>
           ) : null}
@@ -457,11 +512,13 @@ export default function ChatScreen() {
             />
           )}
           contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
           onScrollToIndexFailed={() => {}}
           removeClippedSubviews
           maxToRenderPerBatch={20}
           windowSize={10}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         />
 
         {/* Input area */}
@@ -497,7 +554,6 @@ export default function ChatScreen() {
             />
           </View>
         ) : !canPost ? (
-          // Channel read-only footer
           <View style={[styles.channelFooter, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 8) }]}>
             <View style={[styles.channelInfoBanner, { backgroundColor: colors.surfaceSecondary }]}>
               <MaterialIcons name="campaign" size={18} color={colors.textSecondary} />
@@ -514,13 +570,10 @@ export default function ChatScreen() {
             </Pressable>
           </View>
         ) : (
-          // Normal input
           <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) }]}>
-            {/* Attach button → opens media picker */}
             <Pressable onPress={() => setShowMediaPicker(true)} style={styles.attachButton}>
               <MaterialIcons name="add-circle-outline" size={26} color={colors.primary} />
             </Pressable>
-
             <TextInput
               value={inputText}
               onChangeText={setInputText}
@@ -530,7 +583,6 @@ export default function ChatScreen() {
               multiline
               maxLength={4000}
             />
-
             {inputText.trim() ? (
               <Pressable
                 onPress={handleSend}
@@ -555,7 +607,6 @@ export default function ChatScreen() {
         />
       </KeyboardAvoidingView>
 
-      {/* Telegram-like Media Picker */}
       <MediaPicker
         visible={showMediaPicker}
         colors={colors}
@@ -573,17 +624,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  backButton: { padding: 8 },
+  headerBtn: { padding: 8 },
   headerInfo: { flex: 1, marginLeft: 8 },
   headerName: { fontSize: 16, fontWeight: '600', includeFontPadding: false },
   headerStatus: { fontSize: 13, marginTop: 2, includeFontPadding: false },
-  headerButton: { padding: 8 },
   chatContainer: { flex: 1 },
-  messagesList: { paddingHorizontal: 12, paddingVertical: 12 },
+  messagesList: { paddingHorizontal: 8, paddingVertical: 12 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -645,5 +695,5 @@ const styles = StyleSheet.create({
   pinnedContent: { flex: 1 },
   pinnedLabel: { fontSize: 11, fontWeight: '700', marginBottom: 1, includeFontPadding: false },
   pinnedText: { fontSize: 13, includeFontPadding: false },
-  unpinButton: { padding: 4 },
+  unpinBtn: { padding: 4 },
 });

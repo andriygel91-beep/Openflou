@@ -277,7 +277,11 @@ export function MessageBubble({ message, isOutgoing, senderName, colors, onLongP
     <Animated.View
       entering={FadeInUp.duration(250).springify()}
       exiting={FadeOutDown.duration(200)}
-      style={[{ alignSelf: isOutgoing ? 'flex-end' : 'flex-start', marginBottom: hasReactions ? 0 : 8 }, animatedStyle]}
+      style={[
+        styles.messageWrapper,
+        { alignItems: isOutgoing ? 'flex-end' : 'flex-start' },
+        animatedStyle,
+      ]}
     >
       <Pressable
         onLongPress={onLongPress}
@@ -339,6 +343,10 @@ export function MessageBubble({ message, isOutgoing, senderName, colors, onLongP
 }
 
 const styles = StyleSheet.create({
+  messageWrapper: {
+    width: '100%',
+    marginBottom: 8,
+  },
   bubble: {
     maxWidth: BUBBLE_MAX_W,
     paddingHorizontal: 12,

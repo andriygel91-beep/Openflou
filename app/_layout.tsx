@@ -117,6 +117,13 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="call"
+              options={{
+                animation: 'slide_from_bottom',
+                gestureEnabled: false,
+              }}
+            />
           </Stack>
         </OpenFlouProvider>
       </SafeAreaProvider>
