@@ -1,4 +1,5 @@
-name: Build Optimized APK
+name: Build Standard APK (Stable)
+
 on:
   workflow_dispatch:
 
@@ -6,68 +7,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 🏗 Setup Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
 
-      - name: 🏗 Install pnpm
-        run: npm install -g pnpm
-
-      - name: 🏗 Setup Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '17'
 
-      - name: 📦 Install Dependencies
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Restore Gradle Defaults
         run: |
-          pnpm config set shamefully-hoist true
-          pnpm install --no-frozen-lockfile
+          # Выключаем ProGuard и сжатие ресурсов, чтобы избежать багов
+          sed -i 's/enableProguardInReleaseBuilds = true/enableProguardInReleaseBuilds = false/' android/app/build.gradle
+          sed -i 's/enableShrinkResourcesInReleaseBuilds = true/enableShrinkResourcesInReleaseBuilds = false/' android/app/build.gradle
 
-      - name: 🏗 Prebuild Android
-        run: npx expo prebuild --platform android --no-install
-
-      - name: 🔧 Patch and Shrink
+      - name: Build Release APK
+        working-directory: android
         run: |
-          FILE_APP="android/app/build.gradle"
-          # 1. Защита для Stripe, Звонков и Камеры
-          cat <<EOF > android/app/proguard-rules.pro
-          -keep class com.stripe.** { *; }
-          -keep class com.facebook.react.** { *; }
-          -keep class androidx.camera.** { *; }
-          -keep class org.webrtc.** { *; }
-          -dontwarn com.stripe.**
-          -dontwarn androidx.camera.**
-          -dontwarn org.webrtc.**
-          EOF
+          # Увеличиваем память для стабильности, но без лишних флагов
+          export _JAVA_OPTIONS="-Xmx4g"
+          ./gradlew assembleRelease --no-daemon
 
-          # 2. Только современная архитектура
-          sed -i '/defaultConfig {/a \        ndk { abiFilters "arm64-v8a" }' $FILE_APP
-
-          # 3. Настройка сжатия
-          sed -i '/release {/,/}/c\        release {\n            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"\n        }' $FILE_APP
-          
-          # 4. Включаем Hermes и фикс Stripe
-          sed -i 's/enableHermes: false/enableHermes: true/g' $FILE_APP || true
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
-
-      - name: 🚀 Build Release APK
-        env:
-          NODE_ENV: production
-          _JAVA_OPTIONS: "-Xmx8g"
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew clean assembleRelease -Dorg.gradle.jvmargs="-Xmx8g -XX:MaxMetaspaceSize=1g"
-
-      - name: 📂 Upload Result
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Optimized-OpenFlou-APK
-          # Ищем ЛЮБОЙ apk файл в папке билда, чтобы точно не промахнуться
+          name: OpenFlou-Standard-APK
           path: android/app/build/outputs/apk/release/*.apk
           
