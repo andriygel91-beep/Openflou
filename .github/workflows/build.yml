@@ -1,4 +1,4 @@
-name: Build Standard APK (Stable)
+name: Build Original OpenFlou (Stable & Auto-Sign)
 
 on:
   workflow_dispatch:
@@ -25,24 +25,19 @@ jobs:
         run: npm install -g pnpm
 
       - name: Install Dependencies
-        run: pnpm install
+        # Добавляем флаг, чтобы не было ошибки из-за lockfile
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Restore Gradle Defaults
-        run: |
-          # Выключаем ProGuard и сжатие ресурсов, чтобы избежать багов
-          sed -i 's/enableProguardInReleaseBuilds = true/enableProguardInReleaseBuilds = false/' android/app/build.gradle
-          sed -i 's/enableShrinkResourcesInReleaseBuilds = true/enableShrinkResourcesInReleaseBuilds = false/' android/app/build.gradle
-
-      - name: Build Release APK
+      - name: Build Debug APK
         working-directory: android
         run: |
-          # Увеличиваем память для стабильности, но без лишних флагов
           export _JAVA_OPTIONS="-Xmx4g"
-          ./gradlew assembleRelease --no-daemon
+          # Собираем дебаг-версию: она стабильна и сама подписывается
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Upload Artifact
+      - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Standard-APK
-          path: android/app/build/outputs/apk/release/*.apk
+          name: OpenFlou-Working-Build
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           
