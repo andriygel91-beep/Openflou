@@ -1,5 +1,4 @@
-name: Build Original OpenFlou (Stable & Auto-Sign)
-
+name: Build APK Release (48th Attempt - No JitPack Strategy)
 on:
   workflow_dispatch:
 
@@ -7,37 +6,98 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: 🏗 Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Install pnpm
+      - name: 🏗 Install pnpm
         run: npm install -g pnpm
 
-      - name: Install Dependencies
-        # Добавляем флаг, чтобы не было ошибки из-за lockfile
-        run: pnpm install --no-frozen-lockfile
+      - name: 🏗 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Build Debug APK
-        working-directory: android
+      - name: 📦 Install Dependencies
         run: |
-          export _JAVA_OPTIONS="-Xmx4g"
-          # Собираем дебаг-версию: она стабильна и сама подписывается
-          ./gradlew assembleDebug --no-daemon
+          pnpm config set shamefully-hoist true
+          pnpm install --no-frozen-lockfile
+      - name: 🏗 Prebuild Android
+        run: npx expo prebuild --platform android --no-install
 
-      - name: Upload Result
+      - name: 🔧 Global Offline Repository Patch
+        run: |
+          # 1. Настройка системных свойств для ускорения падения при сетевых ошибках
+          echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
+          echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
+          
+          # 2. Очистка всех build.gradle от знака "+" для Stripe
+          # Это предотвращает обращение к серверам за "новой" версией
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
+          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:+/com.stripe:financial-connections:21.12.0/g' {} +
+          # 3. Полная перезапись build.gradle БЕЗ JITPACK
+          cat <<EOF > android/build.gradle
+          buildscript {
+              ext {
+                  buildToolsVersion = "35.0.0"
+                  minSdkVersion = 24
+                  compileSdkVersion = 35
+                  targetSdkVersion = 35
+                  ndkVersion = "27.0.12077973"
+                  kotlinVersion = "2.0.0"
+              }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath('com.android.tools.build:gradle:8.8.2')
+                  classpath('com.facebook.react:react-native-gradle-plugin')
+                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0")
+                  classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.0")
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  // JitPack полностью удален. Если он понадобится другой библиотеке, 
+                  // мы увидим ошибку мгновенно, а не через 10 минут.
+              }
+              
+              configurations.all {
+                  resolutionStrategy {
+                      // Принудительно используем стабильную версию для основных проблемных модулей
+                      force 'com.stripe:stripe-android:21.12.0'
+                      force 'com.stripe:financial-connections:21.12.0'
+                      
+                      // Не даем динамическим версиям провоцировать сетевые запросы
+                      cacheDynamicVersionsFor 0, 'seconds'
+                      cacheChangingModulesFor 0, 'seconds'
+                  }
+              }
+          }
+          EOF
+          # 4. Оптимизация приложения
+          FILE_APP="android/app/build.gradle"
+          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
+          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
+      - name: 🚀 Build Release APK
+        env:
+          NODE_ENV: production
+          _JAVA_OPTIONS: "-Xmx4g"
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+      - name: 📂 Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Working-Build
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: OpenFlou-Build-48
+          path: android/app/build/outputs/apk/release/app-release.apk
           
