@@ -228,6 +228,24 @@ export function MediaPicker({ visible, colors, onImage, onVideo, onFile, onClose
           <Pressable
             onPress={async () => {
               onClose();
+              // Pick GIF from device files
+              const result = await DocumentPicker.getDocumentAsync({
+                type: 'image/gif',
+                copyToCacheDirectory: true,
+              });
+              if (!result.canceled && result.assets[0]) {
+                onImage(result.assets[0].uri);
+              }
+            }}
+            style={({ pressed }) => [styles.actionBtn, { backgroundColor: colors.surfaceSecondary, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <MaterialIcons name="gif" size={26} color={colors.primary} />
+            <Text style={[styles.actionLabel, { color: colors.text }]}>GIF</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={async () => {
+              onClose();
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Videos,
                 quality: 1,
