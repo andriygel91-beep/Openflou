@@ -75,27 +75,33 @@ export default function ChatsTab() {
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
-  // Poll for incoming calls
+  // Poll for incoming calls — only show calls that started within the last 45 seconds
   useEffect(() => {
     if (!currentUser) return;
     const poll = setInterval(async () => {
       try {
+        const cutoff = new Date(Date.now() - 45_000).toISOString();
         const { data } = await supabase
           .from('openflou_calls')
           .select('*')
           .eq('callee_id', currentUser.id)
           .eq('status', 'ringing')
+          .gte('started_at', cutoff)
           .order('started_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (data && data.id !== incomingCallRef.current?.id) {
-          incomingCallRef.current = data;
-          // Fetch caller info
-          const caller = await api.getUserById(data.caller_id);
-          setIncomingCall({ ...data, caller });
-        } else if (!data && incomingCallRef.current) {
-          incomingCallRef.current = null;
-          setIncomingCall(null);
+
+        if (data) {
+          if (data.id !== incomingCallRef.current?.id) {
+            incomingCallRef.current = data;
+            const caller = await api.getUserById(data.caller_id);
+            setIncomingCall({ ...data, caller });
+          }
+        } else {
+          if (incomingCallRef.current) {
+            incomingCallRef.current = null;
+            setIncomingCall(null);
+          }
         }
       } catch { /* ignore */ }
     }, 2000);
@@ -104,18 +110,19 @@ export default function ChatsTab() {
 
   async function dismissIncomingCall(action: 'decline' | 'answer') {
     if (!incomingCall) return;
+    const call = { ...incomingCall };
+    incomingCallRef.current = null;
+    setIncomingCall(null);
+
     if (action === 'decline') {
       await supabase
         .from('openflou_calls')
         .update({ status: 'declined', ended_at: new Date().toISOString() })
-        .eq('id', incomingCall.id);
-      incomingCallRef.current = null;
-      setIncomingCall(null);
+        .eq('id', call.id);
     } else {
-      const call = incomingCall;
-      incomingCallRef.current = null;
-      setIncomingCall(null);
-      router.push(`/call?chatId=${call.chat_id}&callerId=${call.caller_id}&type=${call.type}&role=callee&callId=${call.id}`);
+      router.push(
+        `/call?chatId=${call.chat_id}&callerId=${call.caller_id}&type=${call.type}&role=callee&callId=${call.id}`
+      );
     }
   }
 
