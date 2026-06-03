@@ -45,7 +45,12 @@ export default function ChatScreen() {
   const isAtBottomRef = useRef(true);
   const messageCountRef = useRef(0);
 
-  const chat = chats.find((c) => c.id === id);
+  // Keep a ref to the last known chat so we never flash "not found" during polls
+  const chatRef = useRef<typeof chats[0] | undefined>(undefined);
+  const liveChatFromContext = chats.find((c) => c.id === id);
+  if (liveChatFromContext) chatRef.current = liveChatFromContext;
+  const chat = chatRef.current;
+
   const isAdmin = chat?.admins?.includes(currentUser?.id || '');
   const isCreator = chat?.creatorId === currentUser?.id;
   const canManage = isAdmin || isCreator;
@@ -73,11 +78,11 @@ export default function ChatScreen() {
     }
   }, [currentUser?.id, userCache]);
 
-  // Auto-refresh messages with 1s polling
+  // Auto-refresh messages with 600ms polling
   useEffect(() => {
     if (!id) return;
     loadMessages(true); // initial — force scroll to bottom
-    const interval = setInterval(() => loadMessages(false), 1000);
+    const interval = setInterval(() => loadMessages(false), 600);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -106,12 +111,20 @@ export default function ChatScreen() {
       const loaded = await getMessagesForChat(id);
       setMessages((prev) => {
         const serverIds = new Set(loaded.map((m) => m.id));
+
+        // Remove any confirmed server IDs from the pending tracking set
         for (const sid of serverIds) {
           pendingIdsRef.current.delete(sid);
         }
+
+        // Only keep optimistic messages that are truly still pending (not yet confirmed)
+        // pendingIdsRef tracks opt_* IDs that have NOT yet been confirmed by the server.
+        // Once sendMessage succeeds, we remove the opt_* ID from pendingIdsRef,
+        // so it will NOT appear here anymore — preventing duplicate messages.
         const pendingOptimistic = prev.filter(
-          (m) => m.id.startsWith('opt_') && !serverIds.has(m.id)
+          (m) => m.id.startsWith('opt_') && pendingIdsRef.current.has(m.id)
         );
+
         const merged = [...loaded, ...pendingOptimistic].sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
@@ -181,6 +194,10 @@ export default function ChatScreen() {
       showAlert(error);
       pendingIdsRef.current.delete(optimisticId);
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+    } else {
+      // Message accepted by server — remove from pending so the next poll
+      // replaces it with the real server message (no more duplicates)
+      pendingIdsRef.current.delete(optimisticId);
     }
   }
 
@@ -235,6 +252,8 @@ export default function ChatScreen() {
       showAlert(error);
       pendingIdsRef.current.delete(real.id);
       setMessages((prev) => prev.filter((m) => m.id !== real.id));
+    } else {
+      pendingIdsRef.current.delete(real.id);
     }
   }
 
@@ -314,12 +333,16 @@ export default function ChatScreen() {
 
     const real: Message = { ...optimistic, id: generateMessageId(), mediaUrl: uploadedUrl };
     pendingIdsRef.current.delete(optimisticId);
+    pendingIdsRef.current.add(real.id);
     setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? real : m)));
 
     const { error } = await sendMessage(real);
     if (error) {
       showAlert(error);
+      pendingIdsRef.current.delete(real.id);
       setMessages((prev) => prev.filter((m) => m.id !== real.id));
+    } else {
+      pendingIdsRef.current.delete(real.id);
     }
   }
 
@@ -422,10 +445,15 @@ export default function ChatScreen() {
     router.push(`/call?chatId=${chat.id}&calleeId=${otherUserId}&type=${callType}&role=caller`);
   }
 
+  // Still loading — don't flash "not found" while chats are being fetched
   if (!chat) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text, padding: 24 }}>Chat not found</Text>
+        <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
