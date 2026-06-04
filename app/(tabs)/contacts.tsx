@@ -1,14 +1,12 @@
 // Openflou Contacts Tab
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
-import * as Contacts from 'expo-contacts';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOpenFlou } from '@/hooks/useOpenFlou';
 import { useAlert } from '@/template';
 import { Avatar, EmptyState } from '@/components';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as storage from '@/services/storage';
 import { generateChatId } from '@/services/encryption';
 import { Contact, Chat } from '@/types';
 import { StatusBar } from 'expo-status-bar';
@@ -22,26 +20,6 @@ export default function ContactsTab() {
   useEffect(() => {
     loadContacts();
   }, []);
-
-  async function importFromPhoneContacts() {
-    try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Permission to access contacts was denied');
-        return;
-      }
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
-      });
-      if (data.length === 0) {
-        showAlert(t.noContacts);
-        return;
-      }
-      showAlert(`Found ${data.length} contacts in your phone`);
-    } catch {
-      showAlert('Error importing contacts');
-    }
-  }
 
   async function handleAddContact(contact: Contact) {
     try {
@@ -60,8 +38,7 @@ export default function ContactsTab() {
   async function handleStartChat(contact: Contact) {
     if (!currentUser) return;
     const chatId = generateChatId([currentUser.id, contact.userId]);
-    const existingChats = await storage.getChats();
-    const existingChat = existingChats.find((c) => c.id === chatId);
+    const existingChat = chats.find((c) => c.id === chatId);
 
     if (existingChat) {
       router.push(`/chat?id=${chatId}`);
@@ -95,19 +72,6 @@ export default function ContactsTab() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.contacts}</Text>
 
         <View style={styles.headerButtons}>
-          <Pressable
-            onPress={importFromPhoneContacts}
-            style={({ pressed }) => [
-              styles.importButton,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <MaterialIcons name="contacts" size={18} color={colors.textInverted} />
-            <Text style={[styles.importButtonText, { color: colors.textInverted }]}>
-              {t.importFromContacts}
-            </Text>
-          </Pressable>
-
           <Pressable
             onPress={() => router.push('/join-chat')}
             style={({ pressed }) => [
@@ -191,22 +155,6 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     marginTop: 8,
-  },
-  importButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  importButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 6,
-    includeFontPadding: false,
   },
   joinButton: {
     flexDirection: 'row',
