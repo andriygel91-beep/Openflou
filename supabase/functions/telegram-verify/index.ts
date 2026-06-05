@@ -1,11 +1,13 @@
 // Openflou Telegram Bot Integration - Full account management
 // Handles: verification, login, account deletion
+// NOTE: JWT verification disabled so Telegram webhook can POST without auth header
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
+// Bypass JWT verification for Telegram webhook (Telegram cannot send auth headers)
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -18,10 +20,29 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // ==================== SETUP WEBHOOK ====================
+    const url = new URL(req.url);
+    if (url.searchParams.get('setup') === 'webhook') {
+      const webhookUrl = `${Deno.env.get('SUPABASE_URL')?.replace('/rest/v1', '')}/functions/v1/telegram-verify`;
+      const result = await fetch(`${TELEGRAM_API}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: webhookUrl,
+          allowed_updates: ['message'],
+        }),
+      });
+      const data = await result.json();
+      console.log('Webhook setup result:', JSON.stringify(data));
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
 
     // ==================== TELEGRAM WEBHOOK ====================
-    if (req.method === 'POST' && (body.message || body.update_id)) {
+    if (req.method === 'POST' && (body.message || body.update_id !== undefined)) {
       const update = body;
       console.log('📨 Telegram webhook:', JSON.stringify(update));
 
@@ -143,7 +164,7 @@ Deno.serve(async (req) => {
 
         // Check if message is a verification/login/delete code
         const upperText = text.toUpperCase();
-        
+
         // Handle verification code (6 chars)
         if (/^[A-Z0-9]{6}$/.test(upperText)) {
           const { data: users } = await supabase
@@ -232,18 +253,17 @@ Deno.serve(async (req) => {
           await supabase.from('openflou_messages').delete().eq('sender_id', user.id);
           await supabase.from('openflou_contacts').delete().eq('user_id', user.id);
           await supabase.from('openflou_sessions').delete().eq('user_id', user.id);
-          
+
           // Delete chats where user is the only participant
           const { data: userChats } = await supabase
             .from('openflou_chats')
             .select('*')
             .contains('participants', [user.id]);
-          
+
           for (const chat of userChats || []) {
             if (chat.participants.length === 1) {
               await supabase.from('openflou_chats').delete().eq('id', chat.id);
             } else {
-              // Remove user from participants
               const newParticipants = chat.participants.filter((p: string) => p !== user.id);
               await supabase
                 .from('openflou_chats')
@@ -282,6 +302,29 @@ Deno.serve(async (req) => {
 
     // ==================== APP API ====================
     const { action, userId, telegramUsername, loginToken } = body;
+
+    // Setup webhook (called once from app to register bot URL)
+    if (action === 'setup_webhook') {
+      const baseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      // Convert REST URL to functions URL
+      const functionsBase = baseUrl.replace('https://', 'https://').replace('.supabase.co', '.supabase.co').replace('/rest/v1', '');
+      const projectRef = baseUrl.match(/https:\/\/([^.]+)/)?.[1] ?? '';
+      const webhookUrl = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify`;
+      console.log('Setting webhook to:', webhookUrl);
+      const result = await fetch(`${TELEGRAM_API}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: webhookUrl,
+          allowed_updates: ['message'],
+        }),
+      });
+      const data = await result.json();
+      console.log('Webhook setup result:', JSON.stringify(data));
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Generate verification code
     if (action === 'generate') {
