@@ -115,26 +115,6 @@ export default function TelegramLinkScreen() {
     }
   }
 
-  async function handleSetupWebhook() {
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.functions.invoke('telegram-verify', {
-        body: { action: 'setup_webhook' },
-      });
-      if (error) throw error;
-      if (data?.ok) {
-        showAlert('Bot Activated', 'Telegram webhook configured successfully!');
-      } else {
-        showAlert('Error', data?.description || 'Webhook setup failed');
-      }
-    } catch (error: any) {
-      showAlert('Error', error.message || 'Failed to setup webhook');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleUnlink() {
     if (!currentUser) return;
 
@@ -297,14 +277,6 @@ export default function TelegramLinkScreen() {
             )}
           </>
         )}
-
-        <Pressable
-          onPress={handleSetupWebhook}
-          style={({ pressed }) => [styles.unlinkButton, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <MaterialIcons name="settings" size={20} color={colors.textSecondary} />
-          <Text style={[styles.unlinkText, { color: colors.textSecondary }]}>Activate Bot Webhook</Text>
-        </Pressable>
 
         {currentUser?.telegram_verified && (
           <Pressable onPress={handleUnlink} style={styles.unlinkButton}>
