@@ -258,7 +258,7 @@ export default function CallScreen() {
       .update({ offer: { enc: realOfferEnc, iv: realOfferIv } })
       .eq('id', cid);
 
-    startPollingAsCallee(cid, pc);
+    startPollingAsCaller(cid, pc);
   }
 
   // ── CALLEE: fetch offer → decode → wait for user to press Answer ──
@@ -334,7 +334,7 @@ export default function CallScreen() {
 
       setStatus('active');
       startDurationTimer();
-      startPollingAsCaller(cid, pc);
+      startPollingAsCallee(cid, pc);
 
       // Apply any caller ICE candidates that already arrived
       await applyRemoteCandidates(cid, 'caller_candidates', pc);
@@ -344,8 +344,8 @@ export default function CallScreen() {
     }
   }
 
-  // Caller polls for answer + callee ICE candidates
-  function startPollingAsCallee(cid: string, pc: RTCPeerConnection) {
+  // Caller polls for callee's answer + callee ICE candidates
+  function startPollingAsCaller(cid: string, pc: RTCPeerConnection) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       if (callEndedRef.current) return;
@@ -385,8 +385,8 @@ export default function CallScreen() {
     }, 1500);
   }
 
-  // Callee polls for caller ICE candidates
-  function startPollingAsCaller(cid: string, pc: RTCPeerConnection) {
+  // Callee polls for caller ICE candidates after answering
+  function startPollingAsCallee(cid: string, pc: RTCPeerConnection) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       if (callEndedRef.current) return;

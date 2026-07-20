@@ -304,11 +304,11 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     const { error } = await api.sendMessage(message.chatId, message);
     
     if (!error) {
-      // Update chat's last message
+      // Update chat's last message (immutable update to avoid stale state)
       const chat = chats.find((c) => c.id === message.chatId);
       if (chat) {
-        chat.lastMessage = message;
-        await updateChat(chat);
+        const updatedChat = { ...chat, lastMessage: message };
+        await updateChat(updatedChat);
       }
     }
     return { error };

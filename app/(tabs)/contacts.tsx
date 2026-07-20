@@ -12,7 +12,7 @@ import { Contact, Chat } from '@/types';
 import { StatusBar } from 'expo-status-bar';
 
 export default function ContactsTab() {
-  const { colors, t, contacts, loadContacts, addContact, currentUser, addChat, theme } = useOpenFlou();
+  const { colors, t, contacts, loadContacts, addContact, currentUser, addChat, chats, theme } = useOpenFlou();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();

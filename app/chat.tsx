@@ -436,7 +436,7 @@ export default function ChatScreen() {
   // Start a voice call with the other user (DMs only)
   function handleStartCall(callType: 'voice' | 'video') {
     if (!chat || !currentUser) return;
-    if (chat.type !== 'direct' && chat.type !== 'private') {
+    if (chat.type !== 'private') {
       showAlert('Calls are only available in direct messages');
       return;
     }
@@ -459,7 +459,7 @@ export default function ChatScreen() {
   }
 
   const isGroup = chat.type === 'group' || chat.type === 'channel';
-  const isDirect = chat.type === 'direct' || chat.type === 'private';
+  const isDirect = chat.type === 'private';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.chatBackground }]} edges={['top']}>
