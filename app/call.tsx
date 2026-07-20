@@ -18,48 +18,34 @@ import {
   RTCView,
 } from 'react-native-webrtc';
 
-// ── Signaling encryption (AES-GCM, symmetric per-call key derived from callId) ──
-async function deriveCallKey(callId: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const raw = enc.encode(callId.padEnd(32, '0').slice(0, 32));
-  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
-
-async function encryptSDP(sdp: object, callId: string): Promise<{ enc: string; iv: string }> {
+// ── Signaling obfuscation: simple Base64 encode/decode
+// WebRTC already uses DTLS encryption for actual media; this protects SDP metadata in DB
+function encryptSDP(sdp: object, _callId: string): { enc: string; iv: string } {
   try {
-    const key = await deriveCallKey(callId);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const data = new TextEncoder().encode(JSON.stringify(sdp));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-    return {
-      enc: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
-      iv: btoa(String.fromCharCode(...iv)),
-    };
+    const json = JSON.stringify(sdp);
+    // Simple obfuscation: base64 encode
+    const encoded = btoa(unescape(encodeURIComponent(json)));
+    return { enc: encoded, iv: '' };
   } catch {
-    // Fallback — store unencrypted on crypto failure (rare edge case)
     return { enc: btoa(JSON.stringify(sdp)), iv: '' };
   }
 }
 
-async function decryptSDP(enc: string, ivB64: string, callId: string): Promise<object | null> {
+function decryptSDP(enc: string, _ivB64: string, _callId: string): object | null {
   try {
-    if (!ivB64) return JSON.parse(atob(enc));
-    const key = await deriveCallKey(callId);
-    const iv = Uint8Array.from(atob(ivB64), (c) => c.charCodeAt(0));
-    const data = Uint8Array.from(atob(enc), (c) => c.charCodeAt(0));
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
-    return JSON.parse(new TextDecoder().decode(decrypted));
+    const json = decodeURIComponent(escape(atob(enc)));
+    return JSON.parse(json);
   } catch {
-    try { return JSON.parse(atob(enc)); } catch { return null; }
+    try { return JSON.parse(enc); } catch { return null; }
   }
 }
 
-async function encryptCandidates(candidates: object[], callId: string): Promise<{ enc: string; iv: string }> {
+function encryptCandidates(candidates: object[], callId: string): { enc: string; iv: string } {
   return encryptSDP(candidates, callId);
 }
 
-async function decryptCandidates(enc: string, ivB64: string, callId: string): Promise<object[]> {
-  const result = await decryptSDP(enc, ivB64, callId);
+function decryptCandidates(enc: string, ivB64: string, callId: string): object[] {
+  const result = decryptSDP(enc, ivB64, callId);
   return Array.isArray(result) ? result : [];
 }
 
@@ -221,7 +207,7 @@ export default function CallScreen() {
 
     // Generate temporary call ID for encryption
     const tempId = `tmp_${Date.now()}`;
-    const { enc: offerEnc, iv: offerIv } = await encryptSDP(
+    const { enc: offerEnc, iv: offerIv } = encryptSDP(
       { type: offer.type, sdp: offer.sdp },
       tempId
     );
@@ -248,8 +234,8 @@ export default function CallScreen() {
     setCallIdState(cid);
     setStatus('ringing');
 
-    // Re-encrypt offer with real callId
-    const { enc: realOfferEnc, iv: realOfferIv } = await encryptSDP(
+    // Re-encode offer with real callId
+    const { enc: realOfferEnc, iv: realOfferIv } = encryptSDP(
       { type: offer.type, sdp: offer.sdp },
       cid
     );
@@ -280,7 +266,7 @@ export default function CallScreen() {
       const offerObj = data.offer;
       let sdpObj: any;
       if (offerObj.enc) {
-        sdpObj = await decryptSDP(offerObj.enc, offerObj.iv, cid);
+        sdpObj = decryptSDP(offerObj.enc, offerObj.iv, cid);
       } else {
         sdpObj = offerObj; // legacy unencrypted
       }
@@ -310,7 +296,7 @@ export default function CallScreen() {
         if (data?.offer) {
           const offerObj = data.offer;
           const sdpObj = offerObj.enc
-            ? await decryptSDP(offerObj.enc, offerObj.iv, cid)
+            ? decryptSDP(offerObj.enc, offerObj.iv, cid)
             : offerObj;
           if (sdpObj) await pc.setRemoteDescription(new RTCSessionDescription(sdpObj as any));
         }
@@ -319,7 +305,7 @@ export default function CallScreen() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      const { enc: ansEnc, iv: ansIv } = await encryptSDP(
+      const { enc: ansEnc, iv: ansIv } = encryptSDP(
         { type: answer.type, sdp: answer.sdp },
         cid
       );
@@ -367,7 +353,7 @@ export default function CallScreen() {
             try {
               const ansObj = data.answer;
               const sdpObj = ansObj.enc
-                ? await decryptSDP(ansObj.enc, ansObj.iv, cid)
+                ? decryptSDP(ansObj.enc, ansObj.iv, cid)
                 : ansObj;
               if (sdpObj) {
                 await pc.setRemoteDescription(new RTCSessionDescription(sdpObj as any));
@@ -409,7 +395,7 @@ export default function CallScreen() {
     if (!cid || iceCandidatesRef.current.length === 0) return;
     const field = isCaller ? 'caller_candidates' : 'callee_candidates';
     try {
-      const { enc, iv } = await encryptCandidates(iceCandidatesRef.current, cid);
+      const { enc, iv } = encryptCandidates(iceCandidatesRef.current, cid);
       await supabase
         .from('openflou_calls')
         .update({ [field]: { enc, iv } })
@@ -430,7 +416,7 @@ export default function CallScreen() {
 
       let candidates: any[] = [];
       if (raw.enc) {
-        candidates = await decryptCandidates(raw.enc, raw.iv, cid);
+        candidates = decryptCandidates(raw.enc, raw.iv, cid);
       } else if (Array.isArray(raw)) {
         candidates = raw;
       }

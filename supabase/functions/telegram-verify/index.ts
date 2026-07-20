@@ -10,7 +10,9 @@ const ADMIN_TELEGRAM_ID = 318088218; // Admin Telegram user ID
 // Auto-setup webhook on every cold start
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const projectRef = SUPABASE_URL.match(/https:\/\/([^.]+)/)?.[1] ?? '';
-const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify`;
+// Use a secret token in the URL so Telegram can POST without JWT auth
+const BOT_SECRET = TELEGRAM_BOT_TOKEN.split(':')[0]; // numeric ID part as secret
+const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify?secret=${BOT_SECRET}`;
 
 (async () => {
   if (!TELEGRAM_BOT_TOKEN) return;
@@ -18,7 +20,11 @@ const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/teleg
     const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: WEBHOOK_URL, allowed_updates: ['message', 'callback_query'] }),
+      body: JSON.stringify({
+        url: WEBHOOK_URL,
+        allowed_updates: ['message', 'callback_query'],
+        secret_token: BOT_SECRET,
+      }),
     });
     const d = await res.json();
     console.log('🤖 Auto webhook setup:', d.ok ? 'OK' : d.description);
@@ -32,6 +38,16 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Validate secret token for webhook requests (bypasses JWT auth)
+  const url = new URL(req.url);
+  const secretParam = url.searchParams.get('secret');
+  const telegramHeader = req.headers.get('x-telegram-bot-api-secret-token');
+  const isWebhookRequest = secretParam === BOT_SECRET || telegramHeader === BOT_SECRET;
+
+  // For non-webhook requests (from app), allow through normally
+  // For webhook requests from Telegram, validate the secret
+  // Skip JWT validation entirely for this function
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -43,7 +59,7 @@ Deno.serve(async (req) => {
     // ====================================================
     // TELEGRAM WEBHOOK (incoming updates from Telegram)
     // ====================================================
-    if (body.update_id !== undefined || body.message || body.callback_query) {
+    if ((body.update_id !== undefined || body.message || body.callback_query) && isWebhookRequest) {
 
       // ---------- CALLBACK QUERY (admin inline buttons) ----------
       if (body.callback_query) {
@@ -574,7 +590,11 @@ Deno.serve(async (req) => {
       const result = await fetch(`${TELEGRAM_API}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: WEBHOOK_URL, allowed_updates: ['message', 'callback_query'] }),
+        body: JSON.stringify({
+          url: WEBHOOK_URL,
+          allowed_updates: ['message', 'callback_query'],
+          secret_token: BOT_SECRET,
+        }),
       });
       const data = await result.json();
       return json(data);
