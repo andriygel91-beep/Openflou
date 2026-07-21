@@ -11,8 +11,8 @@ const ADMIN_TELEGRAM_ID = 318088218; // Admin Telegram user ID
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const projectRef = SUPABASE_URL.match(/https:\/\/([^.]+)/)?.[1] ?? '';
 // Use a secret token in the URL so Telegram can POST without JWT auth
-const BOT_SECRET = TELEGRAM_BOT_TOKEN.split(':')[0]; // numeric ID part as secret
-const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify?secret=${BOT_SECRET}`;
+const BOT_SECRET = (TELEGRAM_BOT_TOKEN.split(':')[0] || 'openflou') + '_openflou_secret';
+const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify?secret=${encodeURIComponent(BOT_SECRET)}`;
 
 (async () => {
   if (!TELEGRAM_BOT_TOKEN) return;
@@ -468,6 +468,51 @@ Deno.serve(async (req) => {
     // APP API (called from mobile app)
     // ====================================================
     const { action, userId, telegramUsername, loginToken, resetToken, newPassword } = body;
+
+    // Test notification — send test message to admin to verify bot works
+    if (action === 'test_notification') {
+      const { targetUserId } = body;
+      let targetChatId: number | null = null;
+      let targetName = 'Test';
+
+      if (targetUserId) {
+        const { data: user } = await supabase
+          .from('openflou_users')
+          .select('telegram_chat_id, display_name, username')
+          .eq('id', targetUserId)
+          .single();
+        if (user?.telegram_chat_id) {
+          targetChatId = user.telegram_chat_id;
+          targetName = user.display_name || user.username || 'User';
+        }
+      }
+
+      // Always notify admin
+      await sendMessage(
+        ADMIN_TELEGRAM_ID,
+        `✅ *Bot Test Notification*
+
+The Openflou Telegram bot is working correctly!
+
+Webhook URL: \`${WEBHOOK_URL}\`
+Timestamp: ${new Date().toISOString()}
+
+All systems operational. 🚀`
+      );
+
+      // Also notify the requesting user if they have telegram linked
+      if (targetChatId && targetChatId !== ADMIN_TELEGRAM_ID) {
+        await sendMessage(
+          targetChatId,
+          `✅ *Test Notification*
+
+Hello ${targetName}! The Openflou bot is working correctly.
+You will receive message notifications here.`
+        );
+      }
+
+      return json({ sent: true, webhookUrl: WEBHOOK_URL });
+    }
 
     // Request Telegram reset — send /recover-style code via bot to linked account
     if (action === 'request_tg_reset') {

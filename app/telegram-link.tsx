@@ -115,6 +115,28 @@ export default function TelegramLinkScreen() {
     }
   }
 
+  async function handleTestBot() {
+    setLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.functions.invoke('telegram-verify', {
+        body: {
+          action: 'test_notification',
+          targetUserId: currentUser?.id,
+        },
+      });
+      if (error) throw error;
+      showAlert(
+        'Test Sent!',
+        'A test notification was sent to @Openfloubot admin. If the bot is working, the admin will receive it instantly.'
+      );
+    } catch (error: any) {
+      showAlert('Error', error.message || 'Failed to send test');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleUnlink() {
     if (!currentUser) return;
 
@@ -279,10 +301,24 @@ export default function TelegramLinkScreen() {
         )}
 
         {currentUser?.telegram_verified && (
-          <Pressable onPress={handleUnlink} style={styles.unlinkButton}>
+          <>
+            <Pressable
+              onPress={handleTestBot}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.testButton,
+                { backgroundColor: colors.online + '22', opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <MaterialIcons name="check-circle" size={20} color={colors.online} />
+              <Text style={[styles.testButtonText, { color: colors.online }]}>Send Test Notification</Text>
+            </Pressable>
+
+            <Pressable onPress={handleUnlink} style={styles.unlinkButton}>
             <MaterialIcons name="link-off" size={20} color={colors.error} />
             <Text style={[styles.unlinkText, { color: colors.error }]}>Unlink Telegram</Text>
-          </Pressable>
+            </Pressable>
+          </>
         )}
       </View>
     </SafeAreaView>
@@ -430,9 +466,23 @@ const styles = StyleSheet.create({
   unlinkButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 12,
     padding: 12,
     gap: 8,
+  },
+  testButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  testButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    includeFontPadding: false,
   },
   unlinkText: {
     fontSize: 15,

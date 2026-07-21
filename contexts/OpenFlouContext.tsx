@@ -1,11 +1,12 @@
 // Openflou Context - Global State with Backend Integration
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { Chat, Message, Contact, User, AppSettings, ThemeType, Language } from '@/types';
 import * as storage from '@/services/storage';
 import * as api from '@/services/api';
 import { lightColors, darkColors } from '@/constants/theme';
 import { translations } from '@/constants/translations';
-import { Appearance } from 'react-native';
+import { Appearance, AppState } from 'react-native';
+import * as pushNotifications from '@/services/pushNotifications';
 
 interface OpenFlouContextType {
   // Theme & Language
@@ -84,13 +85,18 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
       // Update session activity
       api.updateSessionActivity(currentUser.id);
       
-      // Validate session every 30s — if session was deleted remotely, log out
+      // Register push token
+      pushNotifications.registerPushToken(currentUser.id).catch(console.error);
+
+      // Validate session every 60s — if session was deleted remotely, log out
       const sessionCheck = setInterval(async () => {
         try {
+          // Only validate if app is active to avoid false logouts during background
+          if (AppState.currentState !== 'active') return;
           const sessionId = await storage.getSessionId();
           if (!sessionId) {
-            console.log('No session ID stored, logging out');
-            await logout();
+            // No session stored yet — grace period, don't auto-logout immediately
+            console.log('No session ID stored, skipping check');
             return;
           }
           const isValid = await api.checkSessionExists(currentUser.id, sessionId);
@@ -101,7 +107,7 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           console.error('Session check error:', e);
         }
-      }, 30000);
+      }, 60000);
 
       // Update session activity every 60s
       const activityUpdate = setInterval(() => {

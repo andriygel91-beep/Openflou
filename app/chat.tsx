@@ -433,16 +433,39 @@ export default function ChatScreen() {
     return cached?.name || '';
   }
 
-  // Start a voice call with the other user (DMs only)
+  // Start a call (DMs = P2P voice/video; groups = group call via chat route)
   function handleStartCall(callType: 'voice' | 'video') {
     if (!chat || !currentUser) return;
-    if (chat.type !== 'private') {
-      showAlert('Calls are only available in direct messages');
-      return;
+    if (chat.type === 'private') {
+      // 1-on-1 call
+      const otherUserId = chat.participants.find((p) => p !== currentUser.id);
+      if (!otherUserId) return;
+      router.push(`/call?chatId=${chat.id}&calleeId=${otherUserId}&type=${callType}&role=caller`);
+    } else if (chat.type === 'group') {
+      // Group call: caller starts, others see incoming call in their chat
+      showAlert(
+        `Start ${callType === 'video' ? 'Video' : 'Voice'} Group Call?`,
+        `All ${chat.participants.length} members will see an incoming call notification.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start Call',
+            onPress: () => {
+              // For groups, we route to call screen with the group chat ID
+              // Each participant will join from their incoming call modal
+              const otherParticipants = chat.participants.filter((p) => p !== currentUser.id);
+              if (otherParticipants.length === 0) return;
+              // Use first participant as primary callee; others join via polling
+              router.push(
+                `/call?chatId=${chat.id}&calleeId=${otherParticipants[0]}&type=${callType}&role=caller&isGroup=true`
+              );
+            },
+          },
+        ]
+      );
+    } else {
+      showAlert('Calls are only available in direct messages and groups');
     }
-    const otherUserId = chat.participants.find((p) => p !== currentUser.id);
-    if (!otherUserId) return;
-    router.push(`/call?chatId=${chat.id}&calleeId=${otherUserId}&type=${callType}&role=caller`);
   }
 
   // Still loading — don't flash "not found" while chats are being fetched
@@ -477,8 +500,7 @@ export default function ChatScreen() {
             {uploadingMedia ? 'Uploading...' : isGroup ? `${chat.participants.length} members` : t.online}
           </Text>
         </View>
-        {/* Call buttons — only for DMs */}
-        {isDirect ? (
+        {isDirect || chat.type === 'group' ? (
           <>
             <Pressable onPress={() => handleStartCall('voice')} style={styles.headerBtn}>
               <MaterialIcons name="call" size={22} color={colors.primary} />

@@ -4,12 +4,44 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AlertProvider } from '@/template';
 import { OpenFlouProvider } from '@/contexts/OpenFlouContext';
 import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
+
+// Set notification handler globally so foreground notifications show
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+function NotificationNavigator() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Navigate to chat when user taps a notification
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const chatId = response.notification.request.content.data?.chatId as string;
+      if (chatId) {
+        router.push(`/chat?id=${chatId}`);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  return null;
+}
 
 export default function RootLayout() {
   return (
     <AlertProvider>
       <SafeAreaProvider>
         <OpenFlouProvider>
+          <NotificationNavigator />
           <Stack
             screenOptions={{
               headerShown: false,

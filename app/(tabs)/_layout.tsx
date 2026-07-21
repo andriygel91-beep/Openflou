@@ -51,8 +51,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="contacts"
         options={{
-          title: t.contacts,
-          tabBarIcon: ({ color, size }) => <MaterialIcons name="contacts" size={size} color={color} />,
+          title: (t as any).friends || 'Friends',
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="people" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

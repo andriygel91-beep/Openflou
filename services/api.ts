@@ -470,9 +470,78 @@ export async function sendMessage(chatId: string, message: Message): Promise<{ e
       .eq('id', chatId)
       .then(() => {});
 
+    // Send push notifications to other participants (fire-and-forget)
+    sendPushToParticipants(chatId, message).catch(() => {});
+
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
+  }
+}
+
+async function sendPushToParticipants(chatId: string, message: Message): Promise<void> {
+  try {
+    // Get chat participants
+    const { data: chat } = await supabase
+      .from('openflou_chats')
+      .select('participants, name')
+      .eq('id', chatId)
+      .single();
+
+    if (!chat?.participants) return;
+
+    // Get sender display name
+    const { data: sender } = await supabase
+      .from('openflou_users')
+      .select('display_name, username, push_token')
+      .eq('id', message.senderId)
+      .single();
+
+    const senderName = (sender as any)?.display_name || (sender as any)?.username || 'Someone';
+
+    // Determine notification body
+    let notifBody = message.content || '';
+    if (message.type === 'photo') notifBody = '📷 Photo';
+    else if (message.type === 'video') notifBody = '🎥 Video';
+    else if (message.type === 'voice') notifBody = '🎤 Voice message';
+    else if (message.type === 'file') notifBody = '📎 File';
+    else if (!notifBody) notifBody = 'New message';
+    if (notifBody.length > 100) notifBody = notifBody.slice(0, 100) + '…';
+
+    // Get push tokens for all OTHER participants
+    const otherIds = chat.participants.filter((id: string) => id !== message.senderId);
+    if (otherIds.length === 0) return;
+
+    const { data: users } = await supabase
+      .from('openflou_users')
+      .select('push_token')
+      .in('id', otherIds)
+      .not('push_token', 'is', null);
+
+    const tokens = (users || []).map((u: any) => u.push_token).filter(Boolean);
+    if (tokens.length === 0) return;
+
+    // Send via Expo Push API
+    const messages = tokens.map((token: string) => ({
+      to: token,
+      title: senderName,
+      body: notifBody,
+      data: { chatId },
+      sound: 'default',
+      badge: 1,
+      channelId: 'messages',
+    }));
+
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
+    });
+  } catch (err) {
+    console.error('Push notification error:', err);
   }
 }
 
