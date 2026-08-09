@@ -1,6 +1,6 @@
 // Openflou Call Screen — Real WebRTC voice/video with encrypted DB signaling
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -588,7 +588,7 @@ export default function CallScreen() {
       <View style={styles.userSection}>
         <View style={styles.avatarRing}>
           <Avatar uri={otherUser?.avatar} username={displayName} size={100} colors={colors} />
-          {status === 'active' && <View style={styles.activeRing} />}
+          {status === 'active' ? <View style={styles.activeRing} /> : null}
         </View>
 
         <Text style={styles.userName}>{displayName}</Text>
@@ -596,8 +596,8 @@ export default function CallScreen() {
 
         <Text style={[
           styles.statusLabel,
-          status === 'active' && styles.statusActive,
-          (status === 'ended' || status === 'declined' || status === 'failed') && styles.statusEnded,
+          status === 'active' ? styles.statusActive : null,
+          (status === 'ended' || status === 'declined' || status === 'failed') ? styles.statusEnded : null,
         ]}>
           {statusLabel[status]}
         </Text>
