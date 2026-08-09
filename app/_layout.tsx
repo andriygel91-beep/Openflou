@@ -156,6 +156,13 @@ export default function RootLayout() {
                 gestureEnabled: false,
               }}
             />
+            <Stack.Screen
+              name="group-voice"
+              options={{
+                animation: 'slide_from_bottom',
+                gestureEnabled: false,
+              }}
+            />
           </Stack>
         </OpenFlouProvider>
       </SafeAreaProvider>

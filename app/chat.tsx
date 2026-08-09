@@ -500,7 +500,7 @@ export default function ChatScreen() {
             {uploadingMedia ? 'Uploading...' : isGroup ? `${chat.participants.length} members` : t.online}
           </Text>
         </View>
-        {isDirect || chat.type === 'group' ? (
+        {isDirect ? (
           <>
             <Pressable onPress={() => handleStartCall('voice')} style={styles.headerBtn}>
               <MaterialIcons name="call" size={22} color={colors.primary} />
@@ -509,6 +509,10 @@ export default function ChatScreen() {
               <MaterialIcons name="videocam" size={22} color={colors.primary} />
             </Pressable>
           </>
+        ) : chat.type === 'group' ? (
+          <Pressable onPress={() => router.push(`/group-voice?chatId=${chat.id}`)} style={styles.headerBtn}>
+            <MaterialIcons name="headset-mic" size={22} color={colors.primary} />
+          </Pressable>
         ) : null}
         <Pressable
           onPress={() => router.push(`/chat-settings?id=${chat.id}`)}

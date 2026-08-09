@@ -1,6 +1,6 @@
 // Openflou Call Screen — Real WebRTC voice/video with encrypted DB signaling
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,11 +19,9 @@ import {
 } from 'react-native-webrtc';
 
 // ── Signaling obfuscation: simple Base64 encode/decode
-// WebRTC already uses DTLS encryption for actual media; this protects SDP metadata in DB
 function encryptSDP(sdp: object, _callId: string): { enc: string; iv: string } {
   try {
     const json = JSON.stringify(sdp);
-    // Simple obfuscation: base64 encode
     const encoded = btoa(unescape(encodeURIComponent(json)));
     return { enc: encoded, iv: '' };
   } catch {
@@ -49,10 +47,7 @@ function decryptCandidates(enc: string, ivB64: string, callId: string): object[]
   return Array.isArray(result) ? result : [];
 }
 
-// ── Main component ──
 const supabase = getSupabaseClient();
-const { width: SW, height: SH } = Dimensions.get('window');
-
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -63,7 +58,7 @@ const RTC_CONFIG = {
   iceCandidatePoolSize: 10,
 };
 
-type CallStatus = 'initializing' | 'ringing' | 'active' | 'ended' | 'declined' | 'failed';
+type CallStatus = 'initializing' | 'ringing' | 'connecting' | 'active' | 'ended' | 'declined' | 'failed';
 
 export default function CallScreen() {
   const {
@@ -90,18 +85,24 @@ export default function CallScreen() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [connectionState, setConnectionState] = useState('');
   const [isFrontCamera, setIsFrontCamera] = useState(true);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callEndedRef = useRef(false);
+  const answeringRef = useRef(false); // guard to prevent double-answer
   const iceCandidatesRef = useRef<any[]>([]);
   const sentCandidatesRef = useRef<Set<string>>(new Set());
   const appliedCandidatesRef = useRef<Set<string>>(new Set());
   const offerSetRef = useRef(false);
   const answerSetRef = useRef(false);
+  const callIdRef = useRef<string>(incomingCallId || '');
+
+  // Keep callIdRef in sync
+  useEffect(() => {
+    callIdRef.current = callIdState;
+  }, [callIdState]);
 
   // Load other user info
   useEffect(() => {
@@ -118,7 +119,6 @@ export default function CallScreen() {
 
   async function initializeCall() {
     try {
-      // Get local media
       const constraints: any = {
         audio: {
           echoCancellation: true,
@@ -136,19 +136,13 @@ export default function CallScreen() {
       const stream = await mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
-      // Build peer connection
       const pc = new RTCPeerConnection(RTC_CONFIG);
       pcRef.current = pc;
 
-      // Add local tracks to connection
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-      });
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Remote stream accumulator
       const remoteStreamObj = new MediaStream(undefined);
 
-      // Handle incoming remote tracks — this is where we get the other side's audio/video
       pc.addEventListener('track', (event: any) => {
         const track = event?.track;
         if (track) {
@@ -157,7 +151,6 @@ export default function CallScreen() {
         }
       });
 
-      // ICE candidates
       pc.addEventListener('icecandidate', async (event: any) => {
         const candidate = event?.candidate;
         if (candidate) {
@@ -165,16 +158,14 @@ export default function CallScreen() {
           if (!sentCandidatesRef.current.has(key)) {
             sentCandidatesRef.current.add(key);
             iceCandidatesRef.current.push(candidate.toJSON());
-            const cid = callIdState || incomingCallId;
+            const cid = callIdRef.current;
             if (cid) await pushLocalCandidates(cid);
           }
         }
       });
 
-      // Connection state
       pc.addEventListener('connectionstatechange', () => {
         const state = (pc as any).connectionState || '';
-        setConnectionState(state);
         if (state === 'connected') {
           setStatus('active');
           startDurationTimer();
@@ -195,7 +186,7 @@ export default function CallScreen() {
     }
   }
 
-  // ── CALLER: create offer → store encrypted in DB → poll for answer ──
+  // ── CALLER: create offer → store in DB → poll for answer ──
   async function startCallerFlow(pc: RTCPeerConnection) {
     if (!currentUser || !calleeId) return;
 
@@ -205,12 +196,8 @@ export default function CallScreen() {
     } as any);
     await pc.setLocalDescription(offer);
 
-    // Generate temporary call ID for encryption
     const tempId = `tmp_${Date.now()}`;
-    const { enc: offerEnc, iv: offerIv } = encryptSDP(
-      { type: offer.type, sdp: offer.sdp },
-      tempId
-    );
+    const { enc: offerEnc, iv: offerIv } = encryptSDP({ type: offer.type, sdp: offer.sdp }, tempId);
 
     const { data, error } = await supabase
       .from('openflou_calls')
@@ -232,44 +219,31 @@ export default function CallScreen() {
 
     const cid = data.id;
     setCallIdState(cid);
+    callIdRef.current = cid;
     setStatus('ringing');
 
     // Re-encode offer with real callId
-    const { enc: realOfferEnc, iv: realOfferIv } = encryptSDP(
-      { type: offer.type, sdp: offer.sdp },
-      cid
-    );
-    await supabase
-      .from('openflou_calls')
-      .update({ offer: { enc: realOfferEnc, iv: realOfferIv } })
-      .eq('id', cid);
+    const { enc: realOfferEnc, iv: realOfferIv } = encryptSDP({ type: offer.type, sdp: offer.sdp }, cid);
+    await supabase.from('openflou_calls').update({ offer: { enc: realOfferEnc, iv: realOfferIv } }).eq('id', cid);
 
     startPollingAsCaller(cid, pc);
   }
 
-  // ── CALLEE: fetch offer → decode → wait for user to press Answer ──
+  // ── CALLEE: fetch offer → set remote desc → show incoming UI ──
   async function startCalleeFlow(pc: RTCPeerConnection) {
     const cid = incomingCallId;
     if (!cid) { setStatus('failed'); return; }
     setCallIdState(cid);
+    callIdRef.current = cid;
     setStatus('ringing');
 
-    const { data } = await supabase
-      .from('openflou_calls')
-      .select('*')
-      .eq('id', cid)
-      .single();
-
-    if (!data?.offer) { setStatus('failed'); return; }
-
+    // Fetch and apply the offer right away
     try {
+      const { data } = await supabase.from('openflou_calls').select('*').eq('id', cid).single();
+      if (!data?.offer) return;
+
       const offerObj = data.offer;
-      let sdpObj: any;
-      if (offerObj.enc) {
-        sdpObj = decryptSDP(offerObj.enc, offerObj.iv, cid);
-      } else {
-        sdpObj = offerObj; // legacy unencrypted
-      }
+      const sdpObj: any = offerObj.enc ? decryptSDP(offerObj.enc, offerObj.iv, cid) : offerObj;
       if (sdpObj) {
         await pc.setRemoteDescription(new RTCSessionDescription(sdpObj));
         offerSetRef.current = true;
@@ -279,99 +253,95 @@ export default function CallScreen() {
     }
   }
 
-  // Called when callee taps Answer
-  async function answerCall() {
+  // ── Called when callee taps Answer ──
+  const answerCall = useCallback(async () => {
+    // Prevent double-tapping
+    if (answeringRef.current) return;
+    answeringRef.current = true;
+
     const pc = pcRef.current;
-    const cid = callIdState || incomingCallId;
-    if (!pc || !cid) return;
+    const cid = callIdRef.current || incomingCallId;
+    if (!pc || !cid) {
+      answeringRef.current = false;
+      return;
+    }
+
+    // Immediately update UI so Answer button disappears
+    setStatus('connecting');
 
     try {
+      // Ensure offer is set
       if (!offerSetRef.current) {
-        // Try again
-        const { data } = await supabase
-          .from('openflou_calls')
-          .select('offer')
-          .eq('id', cid)
-          .single();
+        const { data } = await supabase.from('openflou_calls').select('offer').eq('id', cid).single();
         if (data?.offer) {
           const offerObj = data.offer;
-          const sdpObj = offerObj.enc
-            ? decryptSDP(offerObj.enc, offerObj.iv, cid)
-            : offerObj;
-          if (sdpObj) await pc.setRemoteDescription(new RTCSessionDescription(sdpObj as any));
+          const sdpObj = offerObj.enc ? decryptSDP(offerObj.enc, offerObj.iv, cid) : offerObj;
+          if (sdpObj) {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdpObj as any));
+            offerSetRef.current = true;
+          }
         }
       }
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      const { enc: ansEnc, iv: ansIv } = encryptSDP(
-        { type: answer.type, sdp: answer.sdp },
-        cid
-      );
+      const { enc: ansEnc, iv: ansIv } = encryptSDP({ type: answer.type, sdp: answer.sdp }, cid);
 
-      await supabase
-        .from('openflou_calls')
-        .update({
-          status: 'active',
-          answer: { enc: ansEnc, iv: ansIv },
-        })
-        .eq('id', cid);
+      await supabase.from('openflou_calls').update({
+        status: 'active',
+        answer: { enc: ansEnc, iv: ansIv },
+      }).eq('id', cid);
 
-      setStatus('active');
-      startDurationTimer();
+      // Push any ICE candidates collected so far
+      await pushLocalCandidates(cid);
+
+      // Start polling for caller's ICE candidates
       startPollingAsCallee(cid, pc);
 
-      // Apply any caller ICE candidates that already arrived
+      // Apply any caller candidates already in DB
       await applyRemoteCandidates(cid, 'caller_candidates', pc);
+
     } catch (err) {
       console.error('Answer error:', err);
-      setStatus('failed');
+      setStatus('ringing'); // restore so user can try again
+      answeringRef.current = false;
     }
-  }
+  }, [incomingCallId, isVideo]);
 
-  // Caller polls for callee's answer + callee ICE candidates
+  // ── Caller polls for callee's answer + ICE candidates ──
   function startPollingAsCaller(cid: string, pc: RTCPeerConnection) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       if (callEndedRef.current) return;
       try {
-        const { data } = await supabase
-          .from('openflou_calls')
-          .select('*')
-          .eq('id', cid)
-          .single();
-
+        const { data } = await supabase.from('openflou_calls').select('*').eq('id', cid).single();
         if (!data) { endCall('ended'); return; }
         if (data.status === 'declined') { endCall('declined'); return; }
         if (data.status === 'ended') { endCall('ended'); return; }
 
         // Set answer when it arrives
         if (data.answer && !answerSetRef.current) {
-          const sigState = (pc as any).signalingState;
-          if (sigState === 'have-local-offer') {
+          const sig = (pc as any).signalingState;
+          if (sig === 'have-local-offer') {
             try {
               const ansObj = data.answer;
-              const sdpObj = ansObj.enc
-                ? decryptSDP(ansObj.enc, ansObj.iv, cid)
-                : ansObj;
+              const sdpObj = ansObj.enc ? decryptSDP(ansObj.enc, ansObj.iv, cid) : ansObj;
               if (sdpObj) {
                 await pc.setRemoteDescription(new RTCSessionDescription(sdpObj as any));
                 answerSetRef.current = true;
               }
-            } catch (e) {
-              console.error('Set answer error:', e);
-            }
+            } catch (e) { console.error('Set answer error:', e); }
           }
         }
 
         await applyRemoteCandidates(cid, 'callee_candidates', pc);
         await pushLocalCandidates(cid);
       } catch { /* ignore */ }
-    }, 1500);
+    }, 1200);
   }
 
-  // Callee polls for caller ICE candidates after answering
+  // ── Callee polls for caller ICE candidates after answering ──
   function startPollingAsCallee(cid: string, pc: RTCPeerConnection) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
@@ -383,12 +353,13 @@ export default function CallScreen() {
           .eq('id', cid)
           .single();
 
-        if (!data || data.status === 'ended') { endCall('ended'); return; }
+        if (!data) { endCall('ended'); return; }
+        if (data.status === 'ended' || data.status === 'declined') { endCall('ended'); return; }
 
         await applyRemoteCandidates(cid, 'caller_candidates', pc);
         await pushLocalCandidates(cid);
       } catch { /* ignore */ }
-    }, 1500);
+    }, 1200);
   }
 
   async function pushLocalCandidates(cid: string) {
@@ -396,38 +367,31 @@ export default function CallScreen() {
     const field = isCaller ? 'caller_candidates' : 'callee_candidates';
     try {
       const { enc, iv } = encryptCandidates(iceCandidatesRef.current, cid);
-      await supabase
-        .from('openflou_calls')
-        .update({ [field]: { enc, iv } })
-        .eq('id', cid);
+      await supabase.from('openflou_calls').update({ [field]: { enc, iv } }).eq('id', cid);
     } catch { /* ignore */ }
   }
 
   async function applyRemoteCandidates(cid: string, field: string, pc: RTCPeerConnection) {
     try {
-      const { data } = await supabase
-        .from('openflou_calls')
-        .select(field)
-        .eq('id', cid)
-        .single();
-
+      const { data } = await supabase.from('openflou_calls').select(field).eq('id', cid).single();
       const raw = (data as any)?.[field];
       if (!raw) return;
 
       let candidates: any[] = [];
-      if (raw.enc) {
+      if (raw.enc && raw.enc.length > 0) {
         candidates = decryptCandidates(raw.enc, raw.iv, cid);
       } else if (Array.isArray(raw)) {
         candidates = raw;
       }
 
+      const sigState = (pc as any).signalingState;
+      if (sigState === 'closed') return;
+
       for (const c of candidates) {
         const key = `${c.sdpMid}_${c.sdpMLineIndex}_${c.candidate}`;
         if (!appliedCandidatesRef.current.has(key)) {
           appliedCandidatesRef.current.add(key);
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(c));
-          } catch { /* stale candidate */ }
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale */ }
         }
       }
     } catch { /* ignore */ }
@@ -457,27 +421,24 @@ export default function CallScreen() {
   }
 
   async function handleDecline() {
-    const cid = callIdState || incomingCallId;
+    const cid = callIdRef.current || incomingCallId;
     if (cid) {
-      await supabase
-        .from('openflou_calls')
-        .update({ status: 'declined', ended_at: new Date().toISOString() })
-        .eq('id', cid);
+      await supabase.from('openflou_calls').update({
+        status: 'declined',
+        ended_at: new Date().toISOString(),
+      }).eq('id', cid);
     }
     endCall('declined');
   }
 
   async function handleEndCall() {
-    const cid = callIdState || incomingCallId;
+    const cid = callIdRef.current || incomingCallId;
     if (cid) {
-      await supabase
-        .from('openflou_calls')
-        .update({
-          status: 'ended',
-          ended_at: new Date().toISOString(),
-          duration_seconds: callDuration,
-        })
-        .eq('id', cid);
+      await supabase.from('openflou_calls').update({
+        status: 'ended',
+        ended_at: new Date().toISOString(),
+        duration_seconds: callDuration,
+      }).eq('id', cid);
     }
     endCall('ended');
   }
@@ -508,6 +469,7 @@ export default function CallScreen() {
   const statusLabel: Record<CallStatus, string> = {
     initializing: 'Connecting...',
     ringing: isCaller ? 'Calling...' : 'Incoming call',
+    connecting: 'Connecting...',
     active: formatDuration(callDuration),
     ended: 'Call ended',
     declined: 'Call declined',
@@ -517,7 +479,7 @@ export default function CallScreen() {
   const displayName = otherUser?.display_name || otherUser?.username || 'Unknown';
 
   // ── VIDEO CALL LAYOUT ──
-  if (isVideo && (status === 'active' || status === 'ringing')) {
+  if (isVideo) {
     return (
       <View style={styles.videoContainer}>
         <StatusBar style="light" hidden />
@@ -534,7 +496,7 @@ export default function CallScreen() {
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }]}>
             <Avatar uri={otherUser?.avatar} username={displayName} size={100} colors={colors} />
-            <Text style={styles.videoWaitText}>Waiting for video...</Text>
+            <Text style={styles.videoWaitText}>{statusLabel[status]}</Text>
           </View>
         )}
 
@@ -555,7 +517,7 @@ export default function CallScreen() {
           </View>
         )}
 
-        {/* Top overlay: name + status */}
+        {/* Top overlay */}
         <View style={styles.videoTopOverlay}>
           <Text style={styles.videoCallName}>{displayName}</Text>
           <Text style={[styles.videoCallStatus, status === 'active' && { color: '#22c55e' }]}>
@@ -565,8 +527,8 @@ export default function CallScreen() {
 
         {/* Video controls */}
         <View style={styles.videoControls}>
-          {/* Callee ringing */}
-          {!isCaller && status === 'ringing' ? (
+          {/* Callee: incoming */}
+          {!isCaller && (status === 'ringing') ? (
             <View style={styles.incomingRow}>
               <View style={styles.controlCol}>
                 <Pressable onPress={handleDecline} style={[styles.ctrlBtn, styles.declineBtn]}>
@@ -575,11 +537,15 @@ export default function CallScreen() {
                 <Text style={styles.ctrlLabel}>Decline</Text>
               </View>
               <View style={styles.controlCol}>
-                <Pressable onPress={() => answerCall()} style={[styles.ctrlBtn, styles.answerBtn]}>
+                <Pressable onPress={answerCall} style={[styles.ctrlBtn, styles.answerBtn]}>
                   <MaterialIcons name="call" size={30} color="#fff" />
                 </Pressable>
                 <Text style={styles.ctrlLabel}>Answer</Text>
               </View>
+            </View>
+          ) : status === 'connecting' ? (
+            <View style={styles.activeRow}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15 }}>Setting up connection...</Text>
             </View>
           ) : (
             <View style={styles.activeRow}>
@@ -602,10 +568,7 @@ export default function CallScreen() {
                 <Text style={styles.ctrlLabel}>Flip</Text>
               </View>
               <View style={styles.controlCol}>
-                <Pressable
-                  onPress={isCaller && status === 'ringing' ? handleDecline : handleEndCall}
-                  style={[styles.ctrlBtn, styles.declineBtn]}
-                >
+                <Pressable onPress={isCaller && status === 'ringing' ? handleDecline : handleEndCall} style={[styles.ctrlBtn, styles.declineBtn]}>
                   <MaterialIcons name="call-end" size={30} color="#fff" />
                 </Pressable>
                 <Text style={styles.ctrlLabel}>End</Text>
@@ -643,14 +606,10 @@ export default function CallScreen() {
           <MaterialIcons name="call" size={13} color="#fff" />
           <Text style={styles.callTypeBadgeText}>Voice call · E2E encrypted</Text>
         </View>
-
-        {connectionState === 'connecting' && status === 'active' ? (
-          <Text style={styles.connectionHint}>Establishing connection...</Text>
-        ) : null}
       </View>
 
       <View style={styles.controlsArea}>
-        {/* Callee ringing */}
+        {/* Callee incoming — only show if truly ringing (not connecting/active) */}
         {!isCaller && status === 'ringing' ? (
           <View style={styles.incomingRow}>
             <View style={styles.controlCol}>
@@ -660,11 +619,15 @@ export default function CallScreen() {
               <Text style={styles.ctrlLabel}>Decline</Text>
             </View>
             <View style={styles.controlCol}>
-              <Pressable onPress={() => answerCall()} style={({ pressed }) => [styles.ctrlBtn, styles.answerBtn, { opacity: pressed ? 0.75 : 1 }]}>
+              <Pressable onPress={answerCall} style={({ pressed }) => [styles.ctrlBtn, styles.answerBtn, { opacity: pressed ? 0.75 : 1 }]}>
                 <MaterialIcons name="call" size={30} color="#fff" />
               </Pressable>
               <Text style={styles.ctrlLabel}>Answer</Text>
             </View>
+          </View>
+        ) : status === 'connecting' ? (
+          <View style={styles.activeRow}>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15 }}>Setting up connection...</Text>
           </View>
         ) : (
           <View style={styles.activeRow}>
@@ -675,10 +638,7 @@ export default function CallScreen() {
               <Text style={styles.ctrlLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
             </View>
             <View style={styles.controlCol}>
-              <Pressable
-                onPress={isCaller && status === 'ringing' ? handleDecline : handleEndCall}
-                style={({ pressed }) => [styles.ctrlBtn, styles.declineBtn, { opacity: pressed ? 0.75 : 1 }]}
-              >
+              <Pressable onPress={isCaller && status === 'ringing' ? handleDecline : handleEndCall} style={({ pressed }) => [styles.ctrlBtn, styles.declineBtn, { opacity: pressed ? 0.75 : 1 }]}>
                 <MaterialIcons name="call-end" size={30} color="#fff" />
               </Pressable>
               <Text style={styles.ctrlLabel}>End</Text>
@@ -691,7 +651,6 @@ export default function CallScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ── Voice layout ──
   safeArea: { flex: 1, backgroundColor: '#0d1117' },
   userSection: {
     flex: 1,
@@ -703,156 +662,56 @@ const styles = StyleSheet.create({
   avatarRing: { position: 'relative', marginBottom: 12 },
   activeRing: {
     position: 'absolute',
-    top: -6,
-    left: -6,
-    width: 112,
-    height: 112,
+    top: -6, left: -6,
+    width: 112, height: 112,
     borderRadius: 56,
     borderWidth: 2,
     borderColor: '#22c55e',
   },
-  userName: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-    textAlign: 'center',
-  },
-  usernameText: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.55)',
-    includeFontPadding: false,
-  },
-  statusLabel: {
-    fontSize: 17,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 10,
-    includeFontPadding: false,
-    fontWeight: '500',
-  },
+  userName: { fontSize: 30, fontWeight: '700', color: '#fff', includeFontPadding: false, textAlign: 'center' },
+  usernameText: { fontSize: 15, color: 'rgba(255,255,255,0.55)', includeFontPadding: false },
+  statusLabel: { fontSize: 17, color: 'rgba(255,255,255,0.75)', marginTop: 10, includeFontPadding: false, fontWeight: '500' },
   statusActive: { color: '#22c55e', fontVariant: ['tabular-nums'] },
   statusEnded: { color: '#ef4444' },
   callTypeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginTop: 8,
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, marginTop: 8,
   },
-  callTypeBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
-  connectionHint: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    marginTop: 6,
-    includeFontPadding: false,
-  },
-  controlsArea: {
-    paddingBottom: 52,
-    paddingHorizontal: 32,
-  },
-  // ── Video layout ──
-  videoContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  callTypeBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600', includeFontPadding: false },
+  controlsArea: { paddingBottom: 52, paddingHorizontal: 32 },
+
+  // Video layout
+  videoContainer: { flex: 1, backgroundColor: '#000' },
   localVideoContainer: {
-    position: 'absolute',
-    top: 60,
-    right: 16,
-    width: 100,
-    height: 150,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    zIndex: 10,
+    position: 'absolute', top: 60, right: 16,
+    width: 100, height: 150, borderRadius: 12, overflow: 'hidden',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+    elevation: 8, zIndex: 10,
   },
-  localVideo: {
-    flex: 1,
-  },
+  localVideo: { flex: 1 },
   videoTopOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 56,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    zIndex: 5,
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingTop: 56, paddingBottom: 20, paddingHorizontal: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 5,
   },
-  videoCallName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-  },
-  videoCallStatus: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 4,
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
-  },
+  videoCallName: { fontSize: 24, fontWeight: '700', color: '#fff', includeFontPadding: false },
+  videoCallStatus: { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 4, fontVariant: ['tabular-nums'], includeFontPadding: false },
   videoControls: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingBottom: 48,
-    paddingTop: 24,
-    paddingHorizontal: 32,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 5,
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingBottom: 48, paddingTop: 24, paddingHorizontal: 32,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  videoWaitText: {
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: 16,
-    fontSize: 15,
-    includeFontPadding: false,
-  },
-  // ── Shared controls ──
-  incomingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  activeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  controlCol: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  ctrlBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  videoWaitText: { color: 'rgba(255,255,255,0.5)', marginTop: 16, fontSize: 15, includeFontPadding: false },
+
+  // Shared controls
+  incomingRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  activeRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  controlCol: { alignItems: 'center', gap: 10 },
+  ctrlBtn: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
   answerBtn: { backgroundColor: '#22c55e' },
   declineBtn: { backgroundColor: '#ef4444' },
   utilBtn: { backgroundColor: 'rgba(255,255,255,0.15)' },
   utilBtnOn: { backgroundColor: 'rgba(255,255,255,0.38)' },
-  ctrlLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 13,
-    includeFontPadding: false,
-  },
+  ctrlLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 13, includeFontPadding: false },
 });

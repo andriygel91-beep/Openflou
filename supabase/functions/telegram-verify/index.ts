@@ -7,16 +7,27 @@ const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const ADMIN_TELEGRAM_ID = 318088218; // Admin Telegram user ID
 
-// Auto-setup webhook on every cold start
+// Hardcoded project ref for reliable webhook URL
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
-const projectRef = SUPABASE_URL.match(/https:\/\/([^.]+)/)?.[1] ?? '';
-// Use a secret token in the URL so Telegram can POST without JWT auth
 const BOT_SECRET = (TELEGRAM_BOT_TOKEN.split(':')[0] || 'openflou') + '_openflou_secret';
-const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/telegram-verify?secret=${encodeURIComponent(BOT_SECRET)}`;
+// Use hardcoded backend URL — more reliable than dynamic project ref extraction
+const WEBHOOK_URL = `https://lrfezdyyybayejnblrfe.backend.onspace.ai/functions/v1/telegram-verify?secret=${encodeURIComponent(BOT_SECRET)}`;
 
+// Auto-setup webhook on every cold start
 (async () => {
   if (!TELEGRAM_BOT_TOKEN) return;
   try {
+    // First check current webhook to avoid unnecessary re-registration
+    const infoRes = await fetch(`${TELEGRAM_API}/getWebhookInfo`);
+    const info = await infoRes.json();
+    const currentUrl = info?.result?.url || '';
+    
+    if (currentUrl === WEBHOOK_URL) {
+      console.log('🤖 Webhook already set correctly');
+      return;
+    }
+    
+    console.log('🤖 Registering webhook, current:', currentUrl || '(none)');
     const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,10 +35,11 @@ const WEBHOOK_URL = `https://${projectRef}.backend.onspace.ai/functions/v1/teleg
         url: WEBHOOK_URL,
         allowed_updates: ['message', 'callback_query'],
         secret_token: BOT_SECRET,
+        drop_pending_updates: false,
       }),
     });
     const d = await res.json();
-    console.log('🤖 Auto webhook setup:', d.ok ? 'OK' : d.description);
+    console.log('🤖 Webhook setup result:', JSON.stringify(d));
   } catch (e) {
     console.error('Webhook auto-setup failed:', e);
   }

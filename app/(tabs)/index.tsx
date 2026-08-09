@@ -75,7 +75,7 @@ export default function ChatsTab() {
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
-  // Poll for incoming calls — only show calls that started within the last 45 seconds
+  // Poll for incoming calls — only show ringing calls from last 45s, not already-answered
   useEffect(() => {
     if (!currentUser) return;
     const poll = setInterval(async () => {
@@ -85,7 +85,7 @@ export default function ChatsTab() {
           .from('openflou_calls')
           .select('*')
           .eq('callee_id', currentUser.id)
-          .eq('status', 'ringing')
+          .eq('status', 'ringing')  // only truly ringing — not active/declined/ended
           .gte('started_at', cutoff)
           .order('started_at', { ascending: false })
           .limit(1)

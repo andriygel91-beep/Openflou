@@ -115,6 +115,26 @@ export default function TelegramLinkScreen() {
     }
   }
 
+  async function handleSetupWebhook() {
+    setLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.functions.invoke('telegram-verify', {
+        body: { action: 'setup_webhook' },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        showAlert('Webhook Active!', `Bot webhook registered successfully.\n${data.description || ''}`);
+      } else {
+        showAlert('Setup Result', JSON.stringify(data));
+      }
+    } catch (error: any) {
+      showAlert('Error', error.message || 'Failed to setup webhook');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleTestBot() {
     setLoading(true);
     try {
@@ -302,6 +322,18 @@ export default function TelegramLinkScreen() {
 
         {currentUser?.telegram_verified && (
           <>
+            <Pressable
+              onPress={handleSetupWebhook}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.testButton,
+                { backgroundColor: colors.primary + '22', opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <MaterialIcons name="webhook" size={20} color={colors.primary} />
+              <Text style={[styles.testButtonText, { color: colors.primary }]}>Re-register Bot Webhook</Text>
+            </Pressable>
+
             <Pressable
               onPress={handleTestBot}
               disabled={loading}
