@@ -310,12 +310,12 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
     const { error } = await api.sendMessage(message.chatId, message);
     
     if (!error) {
-      // Update chat's last message (immutable update to avoid stale state)
-      const chat = chats.find((c) => c.id === message.chatId);
-      if (chat) {
-        const updatedChat = { ...chat, lastMessage: message };
-        await updateChat(updatedChat);
-      }
+      // Only update local state — no DB write here (api.sendMessage already updates updated_at)
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === message.chatId ? { ...c, lastMessage: message } : c
+        )
+      );
     }
     return { error };
   }

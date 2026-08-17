@@ -89,12 +89,18 @@ export default function ContactsTab() {
       return;
     }
 
+    const otherUser = searchResults.find((u: any) => u.id === userId);
+    const chatName = otherUser?.display_name || otherUser?.username || username;
+
     const newChat: Chat = {
       id: chatId,
       type: 'private',
-      name: username,
+      name: chatName,
       avatar,
       participants: [currentUser.id, userId],
+      admins: [],
+      creatorId: currentUser.id,
+      bannedUsers: [],
       unreadCount: 0,
       isPinned: false,
       isMuted: false,

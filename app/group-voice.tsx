@@ -38,77 +38,78 @@ export default function GroupVoiceScreen() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isLeavingRef = useRef(false);
-  const voiceRoomKey = `voice_room_${chatId}`;
+  const isMutedRef = useRef(false);
+  const voiceRoomKey = `voice_${chatId}`;
 
   useEffect(() => {
     start();
-    return () => {
-      stop();
-    };
+    return () => { stop(); };
   }, []);
+
+  // Keep isMutedRef in sync with state
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   async function start() {
     if (!currentUser || !chatId) return;
 
     // Load chat name
     try {
-      const { data } = await supabase.from('openflou_chats').select('name').eq('id', chatId).single();
+      const { data } = await supabase
+        .from('openflou_chats')
+        .select('name')
+        .eq('id', chatId)
+        .single();
       if (data?.name) setChatName(data.name);
     } catch { /* ignore */ }
 
     // Request microphone
     try {
-      const stream = await mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
+      const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
-    } catch { /* ignore - continue without mic */ }
+    } catch { /* continue without mic */ }
 
-    // Register as active in voice room via session update
-    await markActive(true);
+    // Register presence in voice room
+    await markPresence(true);
 
-    // Add self first
-    const selfEntry: VoiceParticipant = {
+    // Add self immediately
+    setParticipants([{
       userId: currentUser.id,
       displayName: (currentUser as any).display_name || currentUser.username,
       username: currentUser.username,
       avatar: currentUser.avatar,
       isMuted: false,
-    };
-    setParticipants([selfEntry]);
+    }]);
 
-    // Start duration timer
+    // Start timers
     durationRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
 
-    // Poll for other participants
-    pollRef.current = setInterval(() => {
-      syncParticipants();
-      markActive(true);
-    }, 3000);
+    // Poll for participants every 4s, refresh own presence every 4s
+    pollRef.current = setInterval(async () => {
+      await markPresence(true);
+      await syncParticipants();
+    }, 4000);
 
     // Initial sync
     await syncParticipants();
   }
 
-  async function markActive(active: boolean) {
-    if (!currentUser) return;
+  async function markPresence(active: boolean) {
+    if (!currentUser || !chatId) return;
     try {
-      // Store voice room presence in a session-like way using openflou_users
-      const payload = active
-        ? { voice_room_id: chatId, voice_room_since: new Date().toISOString() }
-        : { voice_room_id: null, voice_room_since: null };
-      // Use telegram_verification_code field as temporary presence store
-      // (since we don't have a dedicated voice_room table)
-      // Instead, just mark in sessions table with a special device_name
       if (active) {
-        await supabase.from('openflou_sessions').upsert({
-          user_id: currentUser.id,
-          device_name: voiceRoomKey,
-          device_type: 'voice_room',
-          platform: 'voice',
-          last_active: new Date().toISOString(),
-        }, { onConflict: 'user_id,device_name' });
+        // Use INSERT ... ON CONFLICT UPDATE
+        await supabase.from('openflou_sessions').upsert(
+          {
+            user_id: currentUser.id,
+            device_name: voiceRoomKey,
+            device_type: 'voice_room',
+            platform: 'voice',
+            last_active: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,device_name' }
+        );
       } else {
         await supabase
           .from('openflou_sessions')
@@ -122,25 +123,23 @@ export default function GroupVoiceScreen() {
   async function syncParticipants() {
     if (!currentUser || !chatId) return;
     try {
-      // Find everyone in this voice room (active in last 10s)
-      const cutoff = new Date(Date.now() - 10000).toISOString();
+      // Active = last heartbeat within 12s
+      const cutoff = new Date(Date.now() - 12000).toISOString();
       const { data: sessions } = await supabase
         .from('openflou_sessions')
-        .select('user_id, last_active')
+        .select('user_id')
         .eq('device_name', voiceRoomKey)
         .eq('device_type', 'voice_room')
         .gte('last_active', cutoff);
 
       if (!sessions || sessions.length === 0) {
-        // Only self
-        const selfEntry: VoiceParticipant = {
+        setParticipants([{
           userId: currentUser.id,
           displayName: (currentUser as any).display_name || currentUser.username,
           username: currentUser.username,
           avatar: currentUser.avatar,
-          isMuted,
-        };
-        setParticipants([selfEntry]);
+          isMuted: isMutedRef.current,
+        }]);
         return;
       }
 
@@ -154,18 +153,17 @@ export default function GroupVoiceScreen() {
           displayName: u.display_name || u.username,
           username: u.username,
           avatar: u.avatar,
-          isMuted: u.id === currentUser.id ? isMuted : false,
+          isMuted: u.id === currentUser.id ? isMutedRef.current : false,
         }));
 
-      // Always include self even if session expired
-      const hasSelf = list.some((p) => p.userId === currentUser.id);
-      if (!hasSelf) {
+      // Ensure self is always present
+      if (!list.some((p) => p.userId === currentUser.id)) {
         list.unshift({
           userId: currentUser.id,
           displayName: (currentUser as any).display_name || currentUser.username,
           username: currentUser.username,
           avatar: currentUser.avatar,
-          isMuted,
+          isMuted: isMutedRef.current,
         });
       }
 
@@ -180,8 +178,7 @@ export default function GroupVoiceScreen() {
     if (durationRef.current) clearInterval(durationRef.current);
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
-    // Fire-and-forget leave signal
-    markActive(false);
+    markPresence(false);
   }
 
   function toggleMute() {
@@ -218,12 +215,11 @@ export default function GroupVoiceScreen() {
       <SafeAreaView style={styles.headerSafe} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={[styles.liveDot]} />
+            <View style={styles.liveDot} />
             <View>
               <Text style={styles.headerTitle}>{chatName}</Text>
               <Text style={styles.headerSub}>
-                {'Voice \u00b7 '}
-                {formatDuration(duration)}
+                {'Voice \u00b7 '}{formatDuration(duration)}
               </Text>
             </View>
           </View>
@@ -272,8 +268,7 @@ export default function GroupVoiceScreen() {
                   {isSelf ? `${p.displayName} (You)` : p.displayName}
                 </Text>
                 <Text style={styles.participantUsername} numberOfLines={1}>
-                  {'@'}
-                  {p.username}
+                  {'@'}{p.username}
                 </Text>
               </View>
             );
@@ -293,14 +288,8 @@ export default function GroupVoiceScreen() {
               { opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <MaterialIcons
-              name={isMuted ? 'mic-off' : 'mic'}
-              size={24}
-              color="#fff"
-            />
-            <Text style={styles.controlBtnLabel}>
-              {isMuted ? 'Unmute' : 'Mute'}
-            </Text>
+            <MaterialIcons name={isMuted ? 'mic-off' : 'mic'} size={24} color="#fff" />
+            <Text style={styles.controlBtnLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
           </Pressable>
 
           {/* Participants count */}
@@ -346,18 +335,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: DISCORD_GREEN,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-  },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: DISCORD_GREEN },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', includeFontPadding: false },
   headerSub: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
@@ -373,12 +352,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
   },
-  leaveBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    includeFontPadding: false,
-  },
+  leaveBtnText: { color: '#fff', fontSize: 14, fontWeight: '600', includeFontPadding: false },
   participantsScroll: { flex: 1 },
   participantsGrid: {
     flexDirection: 'row',
@@ -394,12 +368,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     width: '100%',
   },
-  emptyRoomText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 15,
-    marginTop: 12,
-    includeFontPadding: false,
-  },
+  emptyRoomText: { color: 'rgba(255,255,255,0.4)', fontSize: 15, marginTop: 12, includeFontPadding: false },
   participantCard: {
     width: '30%',
     alignItems: 'center',
@@ -437,16 +406,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     includeFontPadding: false,
   },
-  controls: {
-    backgroundColor: DISCORD_SIDEBAR,
-    paddingTop: 12,
-    paddingHorizontal: 24,
-  },
-  controlsInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  controls: { backgroundColor: DISCORD_SIDEBAR, paddingTop: 12, paddingHorizontal: 24 },
+  controlsInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   controlBtn: {
     alignItems: 'center',
     gap: 4,
@@ -471,10 +432,5 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
   },
-  participantsCountText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-  },
+  participantsCountText: { fontSize: 16, fontWeight: '700', color: '#fff', includeFontPadding: false },
 });

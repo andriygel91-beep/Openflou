@@ -5,16 +5,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient } from '@/template';
 
-// Configure how notifications appear when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// NOTE: setNotificationHandler is already set in app/_layout.tsx — do NOT duplicate here
 
 /**
  * Request permission and register push token with the backend
@@ -64,9 +55,7 @@ export async function registerPushToken(userId: string): Promise<string | null> 
     }
 
     // Get Expo push token
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: undefined, // Uses app.json projectId if set
-    });
+    const tokenData = await Notifications.getExpoPushTokenAsync({});
     const token = tokenData.data;
 
     if (!token) {

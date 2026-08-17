@@ -114,7 +114,7 @@ export default function CallScreen() {
 
   useEffect(() => {
     initializeCall();
-    return () => cleanup(false);
+    return () => cleanup(true); // Always clean up streams on unmount
   }, []);
 
   async function initializeCall() {
@@ -454,10 +454,9 @@ export default function CallScreen() {
   function cleanup(stopStream: boolean) {
     if (pollRef.current) clearInterval(pollRef.current);
     if (durationRef.current) clearInterval(durationRef.current);
-    if (stopStream) {
-      localStream?.getTracks().forEach((t) => t.stop());
-      pcRef.current?.close();
-    }
+    // Always stop media tracks to release mic/camera
+    localStream?.getTracks().forEach((t) => t.stop());
+    try { pcRef.current?.close(); } catch { /* ignore */ }
   }
 
   const formatDuration = (s: number) => {
