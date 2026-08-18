@@ -10,6 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { getSupabaseClient } from '@/template';
 import * as api from '@/services/api';
+import * as pushNotifications from '@/services/pushNotifications';
 
 const supabase = getSupabaseClient();
 
@@ -56,6 +57,7 @@ export default function ChatsTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const incomingCallRef = useRef<any>(null);
+  const callNotifIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -95,12 +97,28 @@ export default function ChatsTab() {
           if (data.id !== incomingCallRef.current?.id) {
             incomingCallRef.current = data;
             const caller = await api.getUserById(data.caller_id);
-            setIncomingCall({ ...data, caller });
+            const callData = { ...data, caller };
+            setIncomingCall(callData);
+            // Show call notification on locked screen
+            const callerName = (caller as any)?.display_name || (caller as any)?.username || 'Unknown';
+            const notifId = await pushNotifications.showCallNotification(
+              callerName,
+              data.type === 'video' ? 'video' : 'voice',
+              data.chat_id,
+              data.id,
+              data.caller_id
+            );
+            callNotifIdRef.current = notifId;
           }
         } else {
           if (incomingCallRef.current) {
             incomingCallRef.current = null;
             setIncomingCall(null);
+            // Dismiss call notification
+            if (callNotifIdRef.current) {
+              await pushNotifications.dismissCallNotification(callNotifIdRef.current);
+              callNotifIdRef.current = null;
+            }
           }
         }
       } catch { /* ignore */ }
@@ -113,6 +131,11 @@ export default function ChatsTab() {
     const call = { ...incomingCall };
     incomingCallRef.current = null;
     setIncomingCall(null);
+    // Dismiss call notification
+    if (callNotifIdRef.current) {
+      await pushNotifications.dismissCallNotification(callNotifIdRef.current);
+      callNotifIdRef.current = null;
+    }
 
     if (action === 'decline') {
       await supabase

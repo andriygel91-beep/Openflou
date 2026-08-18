@@ -1,110 +1,114 @@
-// Openflou Theme System - Telegram-inspired Design
+// Openflou Theme System — Refined Design
 export const lightColors = {
   // Primary
   primary: '#2481CC',
   primaryLight: '#4A9DE5',
   primaryDark: '#1B6BA8',
-  
+
   // Background
   background: '#FFFFFF',
   backgroundSecondary: '#F4F4F5',
   backgroundTertiary: '#E8E8E8',
-  
+
   // Surface
   surface: '#FFFFFF',
-  surfaceSecondary: '#F7F7F7',
-  
+  surfaceSecondary: '#F2F2F7',
+
   // Message Bubbles
-  bubbleOut: '#EEFFDE',
+  bubbleOut: '#DCEFB7',
   bubbleIn: '#FFFFFF',
-  
+  bubbleOutText: '#000000',
+  bubbleInText: '#000000',
+
   // Text
   text: '#000000',
-  textSecondary: '#707579',
-  textTertiary: '#A0A0A0',
+  textSecondary: '#60666B',
+  textTertiary: '#A8AAAD',
   textInverted: '#FFFFFF',
-  
+
   // Borders & Dividers
-  border: '#E0E0E0',
-  divider: '#DADCE0',
-  
+  border: '#E5E5EA',
+  divider: '#D1D1D6',
+
   // Status
-  success: '#4CAF50',
-  error: '#F44336',
-  warning: '#FF9800',
-  info: '#2196F3',
-  
+  success: '#34C759',
+  error: '#FF3B30',
+  warning: '#FF9500',
+  info: '#2481CC',
+
   // Online Status
-  online: '#4CAF50',
-  offline: '#9E9E9E',
-  
+  online: '#34C759',
+  offline: '#AEAEB2',
+
   // Icons
-  icon: '#707579',
+  icon: '#8E8E93',
   iconActive: '#2481CC',
-  
+
   // Navigation
-  tabBarBackground: '#FFFFFF',
-  tabBarBorder: '#E0E0E0',
-  
+  tabBarBackground: '#F8F8F8',
+  tabBarBorder: '#E5E5EA',
+
   // Chat specific
-  chatBackground: '#D7E4ED',
-  messageTime: '#70757999',
+  chatBackground: '#DAE9F5',
+  messageTime: '#8E8E93',
   unreadBadge: '#2481CC',
-  pinnedBackground: '#F4F4F5',
+  pinnedBackground: '#F2F2F7',
 };
 
 export const darkColors = {
-  // Primary
-  primary: '#7C9EFF',
-  primaryLight: '#99B3FF',
-  primaryDark: '#5A7FE6',
-  
-  // Background
-  background: '#0A0A0A',
-  backgroundSecondary: '#141414',
-  backgroundTertiary: '#1E1E1E',
-  
-  // Surface
-  surface: '#141414',
-  surfaceSecondary: '#1E1E1E',
-  
+  // Primary — warmer blue-violet, less harsh
+  primary: '#5E9CF5',
+  primaryLight: '#7BB3FF',
+  primaryDark: '#4A7FD4',
+
+  // Background — true dark, Telegram-like
+  background: '#17212B',
+  backgroundSecondary: '#0E1621',
+  backgroundTertiary: '#242F3D',
+
+  // Surface — card surfaces slightly lighter
+  surface: '#1C2733',
+  surfaceSecondary: '#242F3D',
+
   // Message Bubbles
-  bubbleOut: '#2A4A7C',
-  bubbleIn: '#1E1E1E',
-  
+  bubbleOut: '#2B5278',
+  bubbleIn: '#182533',
+  bubbleOutText: '#FFFFFF',
+  bubbleInText: '#FFFFFF',
+
   // Text
   text: '#FFFFFF',
-  textSecondary: '#A0A0A0',
-  textTertiary: '#6E6E6E',
-  textInverted: '#000000',
-  
+  textSecondary: '#9DAAB6',
+  textTertiary: '#6B7D8C',
+  textInverted: '#17212B',
+
   // Borders & Dividers
-  border: '#282828',
-  divider: '#323232',
-  
+  border: '#2A3A4A',
+  divider: '#243040',
+
   // Status
-  success: '#4CAF50',
-  error: '#F44336',
-  warning: '#FF9800',
-  info: '#64B5F6',
-  
+  success: '#34C759',
+  error: '#FF453A',
+  warning: '#FF9F0A',
+  info: '#5E9CF5',
+
   // Online Status
-  online: '#4CAF50',
-  offline: '#6E6E6E',
-  
+  online: '#34C759',
+  offline: '#6B7D8C',
+
   // Icons
-  icon: '#A0A0A0',
-  iconActive: '#7C9EFF',
-  
+  icon: '#8BAFC4',
+  iconActive: '#5E9CF5',
+
   // Navigation
-  tabBarBackground: '#141414',
-  tabBarBorder: '#282828',
-  
+  tabBarBackground: '#1C2733',
+  tabBarBorder: '#2A3A4A',
+
   // Chat specific
-  chatBackground: '#0A0A0A',
-  messageTime: '#A0A0A0',
-  unreadBadge: '#7C9EFF',
-  pinnedBackground: '#1E1E1E',
+  chatBackground: '#0E1621',
+  messageTime: '#8BAFC4',
+  unreadBadge: '#5E9CF5',
+  pinnedBackground: '#242F3D',
 };
 
 export const spacing = {
@@ -118,7 +122,6 @@ export const spacing = {
 };
 
 export const typography = {
-  // Sizes
   xs: 11,
   sm: 13,
   md: 15,
@@ -126,14 +129,10 @@ export const typography = {
   xl: 20,
   xxl: 24,
   xxxl: 28,
-  
-  // Weights
   regular: '400' as const,
   medium: '500' as const,
   semibold: '600' as const,
   bold: '700' as const,
-  
-  // Line Heights
   lineHeightTight: 1.2,
   lineHeightNormal: 1.4,
   lineHeightRelaxed: 1.6,
@@ -152,21 +151,21 @@ export const shadows = {
   sm: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
     elevation: 1,
   },
   md: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   lg: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
   },

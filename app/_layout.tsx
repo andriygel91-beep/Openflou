@@ -8,26 +8,44 @@ import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 
-// Set notification handler globally so foreground notifications show
+// Set notification handler globally
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    const action = notification.request.content.data?.action;
+    // Call notifications always show with full priority
+    const isCall = action === 'incoming_call';
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: !isCall,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      priority: isCall
+        ? Notifications.AndroidNotificationPriority.MAX
+        : Notifications.AndroidNotificationPriority.DEFAULT,
+    };
+  },
 });
 
 function NotificationNavigator() {
   const router = useRouter();
 
   useEffect(() => {
-    // Navigate to chat when user taps a notification
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const chatId = response.notification.request.content.data?.chatId as string;
-      if (chatId) {
-        router.push(`/chat?id=${chatId}`);
+      const data = response.notification.request.content.data as any;
+      if (!data) return;
+
+      // Tapping a call notification → open call screen
+      if (data.action === 'incoming_call' && data.callId && data.chatId) {
+        router.push(
+          `/call?chatId=${data.chatId}&callerId=${data.callerId}&type=${data.type}&role=callee&callId=${data.callId}`
+        );
+        return;
+      }
+
+      // Tapping a message notification → open chat
+      if (data.chatId) {
+        router.push(`/chat?id=${data.chatId}`);
       }
     });
     return () => sub.remove();

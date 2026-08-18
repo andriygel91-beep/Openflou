@@ -226,6 +226,12 @@ export default function CallScreen() {
     const { enc: realOfferEnc, iv: realOfferIv } = encryptSDP({ type: offer.type, sdp: offer.sdp }, cid);
     await supabase.from('openflou_calls').update({ offer: { enc: realOfferEnc, iv: realOfferIv } }).eq('id', cid);
 
+    // Push notification to callee so they get alerted even on locked screen
+    if (calleeId && currentUser) {
+      const callerName = (currentUser as any).display_name || currentUser.username || 'Someone';
+      api.sendCallPushNotification(calleeId, callerName, type || 'voice', chatId, cid, currentUser.id).catch(() => {});
+    }
+
     startPollingAsCaller(cid, pc);
   }
 

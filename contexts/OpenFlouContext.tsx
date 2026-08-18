@@ -5,7 +5,7 @@ import * as storage from '@/services/storage';
 import * as api from '@/services/api';
 import { lightColors, darkColors } from '@/constants/theme';
 import { translations } from '@/constants/translations';
-import { Appearance, AppState } from 'react-native';
+import { Appearance, AppState, AppStateStatus } from 'react-native';
 import * as pushNotifications from '@/services/pushNotifications';
 
 interface OpenFlouContextType {
@@ -82,23 +82,29 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (currentUser) {
       createSavedMessagesChat();
-      // Update session activity
-      api.updateSessionActivity(currentUser.id);
-      
+
+      // Start online heartbeat — updates last_seen + is_online every 30s
+      const stopHeartbeat = api.startOnlineHeartbeat(currentUser.id, 30000);
+
+      // Track app foreground/background for accurate online status
+      const appStateHandler = (nextState: AppStateStatus) => {
+        if (nextState === 'active') {
+          api.updateUserOnlineStatus(currentUser.id, true).catch(() => {});
+        } else if (nextState === 'background' || nextState === 'inactive') {
+          api.updateUserOnlineStatus(currentUser.id, false).catch(() => {});
+        }
+      };
+      const appStateSub = AppState.addEventListener('change', appStateHandler);
+
       // Register push token
       pushNotifications.registerPushToken(currentUser.id).catch(console.error);
 
-      // Validate session every 60s — if session was deleted remotely, log out
+      // Validate session every 60s
       const sessionCheck = setInterval(async () => {
         try {
-          // Only validate if app is active to avoid false logouts during background
           if (AppState.currentState !== 'active') return;
           const sessionId = await storage.getSessionId();
-          if (!sessionId) {
-            // No session stored yet — grace period, don't auto-logout immediately
-            console.log('No session ID stored, skipping check');
-            return;
-          }
+          if (!sessionId) return;
           const isValid = await api.checkSessionExists(currentUser.id, sessionId);
           if (!isValid) {
             console.log('Session invalidated remotely, logging out');
@@ -115,8 +121,11 @@ export function OpenFlouProvider({ children }: { children: ReactNode }) {
       }, 60000);
 
       return () => {
+        stopHeartbeat();
+        appStateSub.remove();
         clearInterval(sessionCheck);
         clearInterval(activityUpdate);
+        api.updateUserOnlineStatus(currentUser.id, false).catch(() => {});
       };
     }
   }, [currentUser?.id]);

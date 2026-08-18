@@ -1,23 +1,22 @@
 // Openflou Push Notification Service
-// Registers Expo push tokens and schedules local notifications
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient } from '@/template';
 
-// NOTE: setNotificationHandler is already set in app/_layout.tsx — do NOT duplicate here
+// NOTE: setNotificationHandler is set in app/_layout.tsx — do NOT duplicate here
 
 /**
- * Request permission and register push token with the backend
+ * Request permission and register push token with the backend.
+ * Also configures Android notification channels (messages + calls).
  */
 export async function registerPushToken(userId: string): Promise<string | null> {
   try {
     if (!Device.isDevice) {
-      console.log('Push notifications not available on simulator');
+      console.log('Push notifications: simulator — skipping token registration');
       return null;
     }
 
-    // Request permission
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -31,30 +30,32 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       return null;
     }
 
-    // Configure Android notification channel
     if (Platform.OS === 'android') {
+      // Messages channel — normal priority, sound + vibration
       await Notifications.setNotificationChannelAsync('messages', {
         name: 'Messages',
-        importance: Notifications.AndroidImportance.MAX,
+        importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#4A90D9',
+        lightColor: '#5E9CF5',
         sound: 'default',
         enableVibrate: true,
         showBadge: true,
       });
 
+      // Calls channel — MAX priority, full-screen intent (shows on locked screen)
       await Notifications.setNotificationChannelAsync('calls', {
-        name: 'Calls',
+        name: 'Incoming Calls',
         importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 500],
-        lightColor: '#22c55e',
+        vibrationPattern: [0, 1000, 500, 1000],
+        lightColor: '#34C759',
         sound: 'default',
         enableVibrate: true,
         showBadge: false,
+        bypassDnd: true,         // bypass Do Not Disturb
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
 
-    // Get Expo push token
     const tokenData = await Notifications.getExpoPushTokenAsync({});
     const token = tokenData.data;
 
@@ -63,14 +64,14 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       return null;
     }
 
-    // Store token in DB
+    // Save token to DB
     const supabase = getSupabaseClient();
     await supabase
       .from('openflou_users')
       .update({ push_token: token })
       .eq('id', userId);
 
-    console.log('Push token registered:', token.slice(0, 20) + '...');
+    console.log('Push token registered:', token.slice(0, 30) + '...');
     return token;
   } catch (error) {
     console.error('Push token registration error:', error);
@@ -79,7 +80,39 @@ export async function registerPushToken(userId: string): Promise<string | null> 
 }
 
 /**
- * Show a local notification immediately (for foreground messages)
+ * Show incoming call notification (works on locked screen on Android via MAX channel).
+ */
+export async function showCallNotification(
+  callerName: string,
+  callType: 'voice' | 'video',
+  chatId: string,
+  callId: string,
+  callerId: string
+): Promise<string> {
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: callType === 'video' ? '📹 Incoming Video Call' : '📞 Incoming Voice Call',
+      body: `${callerName} is calling...`,
+      data: { chatId, callId, callerId, type: callType, action: 'incoming_call' },
+      sound: 'default',
+      ...(Platform.OS === 'android' && { channelId: 'calls' }),
+    },
+    trigger: null,
+  });
+  return id;
+}
+
+/**
+ * Dismiss a specific call notification by its ID.
+ */
+export async function dismissCallNotification(notifId: string): Promise<void> {
+  try {
+    await Notifications.dismissNotificationAsync(notifId);
+  } catch { /* ignore */ }
+}
+
+/**
+ * Show a local notification immediately (for foreground messages).
  */
 export async function showLocalNotification(
   title: string,
@@ -94,8 +127,9 @@ export async function showLocalNotification(
         data: data || {},
         sound: 'default',
         badge: 1,
+        ...(Platform.OS === 'android' && { channelId: 'messages' }),
       },
-      trigger: null, // Show immediately
+      trigger: null,
     });
   } catch (error) {
     console.error('Local notification error:', error);
@@ -103,25 +137,10 @@ export async function showLocalNotification(
 }
 
 /**
- * Clear badge count
+ * Clear badge count.
  */
 export async function clearBadge(): Promise<void> {
   try {
     await Notifications.setBadgeCountAsync(0);
   } catch { /* ignore */ }
-}
-
-/**
- * Add notification response listener (when user taps notification)
- */
-export function addNotificationResponseListener(
-  handler: (chatId: string) => void
-): () => void {
-  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-    const chatId = response.notification.request.content.data?.chatId as string;
-    if (chatId) {
-      handler(chatId);
-    }
-  });
-  return () => subscription.remove();
 }

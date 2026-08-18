@@ -13,18 +13,9 @@ export async function signUp(username: string, displayName: string, password: st
     const { data, error } = await supabase.functions.invoke('openflou-auth', {
       body: { action: 'signup', username: username.toLowerCase(), displayName, password },
     });
-
-    if (error) {
-      return { user: null, error: error.message };
-    }
-
-    if (data.error) {
-      return { user: null, error: data.error };
-    }
-
-    // Create session
+    if (error) return { user: null, error: error.message };
+    if (data.error) return { user: null, error: data.error };
     await createSession(data.user.id);
-
     return { user: data.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message || 'Sign up failed' };
@@ -36,18 +27,9 @@ export async function signIn(username: string, password: string): Promise<{ user
     const { data, error } = await supabase.functions.invoke('openflou-auth', {
       body: { action: 'signin', username: username.toLowerCase(), password },
     });
-
-    if (error) {
-      return { user: null, error: error.message };
-    }
-
-    if (data.error) {
-      return { user: null, error: data.error };
-    }
-
-    // Create session
+    if (error) return { user: null, error: error.message };
+    if (data.error) return { user: null, error: data.error };
     await createSession(data.user.id);
-
     return { user: data.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message || 'Sign in failed' };
@@ -64,46 +46,66 @@ export async function updateUserStatus(userId: string, isOnline: boolean): Promi
   }
 }
 
+/**
+ * Update is_online flag and last_seen timestamp directly.
+ */
+export async function updateUserOnlineStatus(userId: string, isOnline: boolean): Promise<void> {
+  try {
+    await supabase
+      .from('openflou_users')
+      .update({
+        is_online: isOnline,
+        last_seen: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+  } catch (error) {
+    console.error('updateUserOnlineStatus error:', error);
+  }
+}
+
+/**
+ * Heartbeat — update last_seen every N seconds while app is active.
+ * Returns cleanup function.
+ */
+export function startOnlineHeartbeat(userId: string, intervalMs = 30000): () => void {
+  const tick = () => updateUserOnlineStatus(userId, true);
+  tick();
+  const id = setInterval(tick, intervalMs);
+  return () => clearInterval(id);
+}
+
 // ==================== SESSIONS ====================
 
 async function createSession(userId: string): Promise<void> {
   try {
     const storageModule = await import('@/services/storage');
-    
-    // Check if we already have a valid session ID stored locally
     const existingSessionId = await storageModule.getSessionId();
     if (existingSessionId) {
-      // Verify it still exists on server
       const { data: existing } = await supabase
         .from('openflou_sessions')
         .select('id')
         .eq('id', existingSessionId)
         .eq('user_id', userId)
         .maybeSingle();
-      
       if (existing?.id) {
-        // Session is valid — just refresh activity
         await supabase
           .from('openflou_sessions')
           .update({ last_active: new Date().toISOString() })
           .eq('id', existing.id);
-        console.log('✅ Reused existing session:', existing.id);
+        console.log('Reused existing session:', existing.id);
         return;
       }
     }
 
-    // Create new session
     const deviceName = Device.deviceName || `Device_${Date.now()}`;
     const deviceType = Device.modelName || 'Unknown Model';
     const platform = Device.osName || 'Unknown OS';
-
     let ipAddress = 'Unknown';
     try {
       const ip = await Network.getIpAddressAsync();
       ipAddress = ip || 'Unknown';
-    } catch {
-      // Ignore IP fetch errors
-    }
+    } catch { /* ignore */ }
 
     const { data, error } = await supabase.from('openflou_sessions').insert({
       user_id: userId,
@@ -115,9 +117,9 @@ async function createSession(userId: string): Promise<void> {
 
     if (data?.id && !error) {
       await storageModule.saveSessionId(data.id);
-      console.log('✅ Created new session:', data.id);
+      console.log('Created new session:', data.id);
     } else if (error) {
-      console.error('❌ Session insert error:', error);
+      console.error('Session insert error:', error);
     }
   } catch (error) {
     console.error('Create session error:', error);
@@ -131,7 +133,6 @@ export async function getSessions(userId: string) {
       .select('*')
       .eq('user_id', userId)
       .order('last_active', { ascending: false });
-
     if (error) throw error;
     return { sessions: data || [], error: null };
   } catch (error: any) {
@@ -141,45 +142,27 @@ export async function getSessions(userId: string) {
 
 export async function deleteSession(sessionId: string) {
   try {
-    console.log('🗑️ API: Deleting session:', sessionId);
-    
     const { error } = await supabase
       .from('openflou_sessions')
       .delete()
       .eq('id', sessionId);
-
-    if (error) {
-      console.error('❌ Delete session error:', error);
-      throw error;
-    }
-    
-    console.log('✅ Session deleted successfully');
+    if (error) throw error;
     return { error: null };
   } catch (error: any) {
-    console.error('❌ Delete session exception:', error);
     return { error: error.message };
   }
 }
 
 export async function deleteAllOtherSessions(userId: string, currentSessionId: string) {
   try {
-    console.log('🗑️ API: Deleting all other sessions for user:', userId);
-    
     const { error } = await supabase
       .from('openflou_sessions')
       .delete()
       .eq('user_id', userId)
       .neq('id', currentSessionId);
-
-    if (error) {
-      console.error('❌ Delete all sessions error:', error);
-      throw error;
-    }
-    
-    console.log('✅ All other sessions deleted');
+    if (error) throw error;
     return { error: null };
   } catch (error: any) {
-    console.error('❌ Delete all sessions exception:', error);
     return { error: error.message };
   }
 }
@@ -189,7 +172,6 @@ export async function updateSessionActivity(userId: string): Promise<void> {
     const storageModule = await import('@/services/storage');
     const sessionId = await storageModule.getSessionId();
     if (!sessionId) return;
-    
     await supabase
       .from('openflou_sessions')
       .update({ last_active: new Date().toISOString() })
@@ -208,7 +190,6 @@ export async function getUsers(): Promise<User[]> {
       .from('openflou_users')
       .select('*')
       .order('username');
-
     if (error) throw error;
     return data || [];
   } catch (error) {
@@ -224,7 +205,6 @@ export async function getUserById(userId: string): Promise<User | null> {
       .select('*')
       .eq('id', userId)
       .single();
-
     if (error) throw error;
     return data;
   } catch (error) {
@@ -242,16 +222,13 @@ export async function updateUser(user: User): Promise<{ error: string | null }> 
       is_online: user.isOnline ?? false,
       updated_at: new Date().toISOString(),
     };
-    // display_name lives in openflou_users
     if ('display_name' in user) {
       updatePayload['display_name'] = (user as any).display_name || user.username;
     }
-
     const { error } = await supabase
       .from('openflou_users')
       .update(updatePayload)
       .eq('id', user.id);
-
     if (error) throw error;
     return { error: null };
   } catch (error: any) {
@@ -263,46 +240,23 @@ export async function updateUser(user: User): Promise<{ error: string | null }> 
 
 export async function getChats(userId: string): Promise<Chat[]> {
   try {
-    console.log('✅ API: Getting chats for user:', userId);
-    
     const { data, error } = await supabase
       .from('openflou_chats')
       .select('*')
       .order('updated_at', { ascending: false });
 
-    if (error) {
-      console.error('❌ Get chats DB error:', error);
-      throw error;
-    }
+    if (error) throw error;
 
-    console.log('📊 API: Raw chats from DB:', data?.length || 0, data?.map(c => ({ id: c.id, type: c.type, name: c.name, participants: c.participants })));
-
-    // Filter chats where user is participant
     const userChats = (data || []).filter((chat) => {
-      // Saved messages
-      if (chat.type === 'saved') {
-        const match = chat.id === `saved_${userId}`;
-        console.log('🔍 Saved chat check:', chat.id, 'expected:', `saved_${userId}`, 'match:', match);
-        return match;
-      }
-      // For other chats, check participants array
-      if (!chat.participants || !Array.isArray(chat.participants)) {
-        console.log('⚠️ Chat has no participants array:', chat.id);
-        return false;
-      }
-      const isParticipant = chat.participants.includes(userId);
-      console.log('🔍 Chat participant check:', chat.id, 'type:', chat.type, 'participants:', chat.participants, 'userId:', userId, 'match:', isParticipant);
-      return isParticipant;
+      if (chat.type === 'saved') return chat.id === `saved_${userId}`;
+      if (!chat.participants || !Array.isArray(chat.participants)) return false;
+      return chat.participants.includes(userId);
     });
 
-    console.log('✅ API: Filtered user chats:', userChats.length);
-
-    // For each chat, get last message
     const chatsWithMessages = await Promise.all(
       userChats.map(async (chat) => {
         const messages = await getMessages(chat.id);
         const lastMessage = messages[messages.length - 1];
-        
         return {
           id: chat.id,
           type: chat.type,
@@ -326,19 +280,16 @@ export async function getChats(userId: string): Promise<Chat[]> {
       })
     );
 
-    console.log('✅ API: Returning chats with messages:', chatsWithMessages.length);
     return chatsWithMessages;
   } catch (error) {
-    console.error('❌ Get chats error:', error);
+    console.error('Get chats error:', error);
     return [];
   }
 }
 
 export async function createChat(chat: Chat): Promise<{ error: string | null }> {
   try {
-    console.log('📝 API: Creating chat:', chat.id, 'type:', chat.type, 'name:', chat.name, 'participants:', chat.participants);
-    
-    const { data, error } = await supabase.from('openflou_chats').insert({
+    const { error } = await supabase.from('openflou_chats').insert({
       id: chat.id,
       type: chat.type,
       name: chat.name,
@@ -350,17 +301,11 @@ export async function createChat(chat: Chat): Promise<{ error: string | null }> 
       creator_id: chat.creatorId,
       banned_users: chat.bannedUsers || [],
       pinned_message_id: chat.pinnedMessageId,
-    }).select();
-
-    if (error) {
-      console.error('❌ Create chat error:', error);
-      throw error;
-    }
-    
-    console.log('✅ Chat created:', data);
+    });
+    if (error) throw error;
     return { error: null };
   } catch (error: any) {
-    console.error('❌ Create chat exception:', error);
+    console.error('Create chat error:', error);
     return { error: error.message };
   }
 }
@@ -379,20 +324,16 @@ export async function updateChat(chat: Chat): Promise<{ error: string | null }> 
       pinned_message_id: chat.pinnedMessageId,
       updated_at: new Date().toISOString(),
     };
-
-    // Add disappearing messages fields if they exist
     if (chat.disappearingMessagesEnabled !== undefined) {
       updateData.disappearing_messages_enabled = chat.disappearingMessagesEnabled;
     }
     if (chat.disappearingMessagesTimer !== undefined) {
       updateData.disappearing_messages_timer = chat.disappearingMessagesTimer;
     }
-
     const { error } = await supabase
       .from('openflou_chats')
       .update(updateData)
       .eq('id', chat.id);
-
     if (error) throw error;
     return { error: null };
   } catch (error: any) {
@@ -402,11 +343,7 @@ export async function updateChat(chat: Chat): Promise<{ error: string | null }> 
 
 export async function deleteChat(chatId: string): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase
-      .from('openflou_chats')
-      .delete()
-      .eq('id', chatId);
-
+    const { error } = await supabase.from('openflou_chats').delete().eq('id', chatId);
     if (error) throw error;
     return { error: null };
   } catch (error: any) {
@@ -447,7 +384,6 @@ export async function getMessages(chatId: string): Promise<Message[]> {
 
 export async function sendMessage(chatId: string, message: Message): Promise<{ error: string | null }> {
   try {
-    // Direct insert — bypasses Edge Function latency (~300ms saved)
     const { error } = await supabase
       .from('openflou_messages')
       .insert({
@@ -470,6 +406,13 @@ export async function sendMessage(chatId: string, message: Message): Promise<{ e
       .eq('id', chatId)
       .then(() => {});
 
+    // Update sender last_seen (fire-and-forget)
+    supabase
+      .from('openflou_users')
+      .update({ last_seen: new Date().toISOString(), is_online: true })
+      .eq('id', message.senderId)
+      .then(() => {});
+
     // Send push notifications to other participants (fire-and-forget)
     sendPushToParticipants(chatId, message).catch(() => {});
 
@@ -481,34 +424,30 @@ export async function sendMessage(chatId: string, message: Message): Promise<{ e
 
 async function sendPushToParticipants(chatId: string, message: Message): Promise<void> {
   try {
-    // Get chat participants
     const { data: chat } = await supabase
       .from('openflou_chats')
       .select('participants, name')
       .eq('id', chatId)
       .single();
-
     if (!chat?.participants) return;
 
-    // Get sender display name
     const { data: sender } = await supabase
       .from('openflou_users')
-      .select('display_name, username, push_token')
+      .select('display_name, username')
       .eq('id', message.senderId)
       .single();
 
     const senderName = (sender as any)?.display_name || (sender as any)?.username || 'Someone';
+    const chatName = chat.participants.length > 2 ? chat.name : undefined;
 
-    // Determine notification body
     let notifBody = message.content || '';
-    if (message.type === 'photo') notifBody = '📷 Photo';
-    else if (message.type === 'video') notifBody = '🎥 Video';
-    else if (message.type === 'voice') notifBody = '🎤 Voice message';
-    else if (message.type === 'file') notifBody = '📎 File';
+    if (message.type === 'photo') notifBody = '\ud83d\udcf7 Photo';
+    else if (message.type === 'video') notifBody = '\ud83c\udfa5 Video';
+    else if (message.type === 'voice') notifBody = '\ud83c\udfa4 Voice message';
+    else if (message.type === 'file') notifBody = '\ud83d\udcce File';
     else if (!notifBody) notifBody = 'New message';
-    if (notifBody.length > 100) notifBody = notifBody.slice(0, 100) + '…';
+    if (notifBody.length > 100) notifBody = notifBody.slice(0, 100) + '\u2026';
 
-    // Get push tokens for all OTHER participants
     const otherIds = chat.participants.filter((id: string) => id !== message.senderId);
     if (otherIds.length === 0) return;
 
@@ -521,27 +460,64 @@ async function sendPushToParticipants(chatId: string, message: Message): Promise
     const tokens = (users || []).map((u: any) => u.push_token).filter(Boolean);
     if (tokens.length === 0) return;
 
-    // Send via Expo Push API
-    const messages = tokens.map((token: string) => ({
+    const pushMessages = tokens.map((token: string) => ({
       to: token,
-      title: senderName,
+      title: chatName ? `${senderName} in ${chatName}` : senderName,
       body: notifBody,
       data: { chatId },
       sound: 'default',
       badge: 1,
       channelId: 'messages',
+      priority: 'high',
     }));
 
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(pushMessages.length === 1 ? pushMessages[0] : pushMessages),
     });
   } catch (err) {
     console.error('Push notification error:', err);
+  }
+}
+
+/**
+ * Send a high-priority call push to the callee (shows on locked screen).
+ */
+export async function sendCallPushNotification(
+  calleeId: string,
+  callerName: string,
+  callType: string,
+  chatId: string,
+  callId: string,
+  callerId: string
+): Promise<void> {
+  try {
+    const { data: callee } = await supabase
+      .from('openflou_users')
+      .select('push_token')
+      .eq('id', calleeId)
+      .single();
+
+    const token = (callee as any)?.push_token;
+    if (!token) return;
+
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        to: token,
+        title: callType === 'video' ? '\ud83d\udcf9 Incoming Video Call' : '\ud83d\udcde Incoming Voice Call',
+        body: `${callerName} is calling...`,
+        data: { chatId, callId, callerId, type: callType, action: 'incoming_call' },
+        sound: 'default',
+        channelId: 'calls',
+        priority: 'max',
+        ttl: 30,
+      }),
+    });
+  } catch (err) {
+    console.error('Call push notification error:', err);
   }
 }
 
@@ -555,9 +531,7 @@ export async function updateMessage(message: Message): Promise<{ error: string |
         reactions: message.reactions || [],
       })
       .eq('id', message.id);
-
     if (error) throw error;
-
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
@@ -566,16 +540,11 @@ export async function updateMessage(message: Message): Promise<{ error: string |
 
 export async function deleteMessage(chatId: string, messageId: string): Promise<{ error: string | null }> {
   try {
-    const { data, error } = await supabase.functions.invoke('openflou-messages', {
-      body: {
-        action: 'delete',
-        messageId,
-      },
-    });
-
+    const { error } = await supabase
+      .from('openflou_messages')
+      .delete()
+      .eq('id', messageId);
     if (error) throw error;
-    if (data.error) throw new Error(data.error);
-
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
@@ -605,18 +574,15 @@ export async function getContacts(userId: string): Promise<Contact[]> {
       .from('openflou_contacts')
       .select('contact_id')
       .eq('user_id', userId);
-
     if (error) throw error;
 
     const contactIds = (data || []).map((c) => c.contact_id);
-    
     if (contactIds.length === 0) return [];
 
     const { data: users, error: usersError } = await supabase
       .from('openflou_users')
       .select('*')
       .in('id', contactIds);
-
     if (usersError) throw usersError;
 
     return (users || []).map((user) => ({
@@ -640,7 +606,6 @@ export async function addContact(userId: string, contactId: string): Promise<{ e
       user_id: userId,
       contact_id: contactId,
     });
-
     if (error) throw error;
     return { error: null };
   } catch (error: any) {
@@ -655,7 +620,6 @@ export async function removeContact(userId: string, contactId: string): Promise<
       .delete()
       .eq('user_id', userId)
       .eq('contact_id', contactId);
-
     if (error) throw error;
     return { error: null };
   } catch (error: any) {
@@ -663,9 +627,8 @@ export async function removeContact(userId: string, contactId: string): Promise<
   }
 }
 
-// ==================== SEARCH CHATS BY USERNAME ====================
+// ==================== SEARCH ====================
 
-// Global user search
 export async function searchUsersByUsername(query: string): Promise<{ data: any[] | null; error: string | null }> {
   try {
     const { data, error } = await supabase
@@ -674,7 +637,6 @@ export async function searchUsersByUsername(query: string): Promise<{ data: any[
       .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
       .order('username')
       .limit(50);
-
     if (error) throw error;
     return { data, error: null };
   } catch (error: any) {
@@ -692,9 +654,7 @@ export async function searchChatByUsername(username: string): Promise<{ chat: Ch
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return { chat: null, error: 'Chat not found' };
-      }
+      if (error.code === 'PGRST116') return { chat: null, error: 'Chat not found' };
       throw error;
     }
 
@@ -730,33 +690,24 @@ export async function searchChatByUsername(username: string): Promise<{ chat: Ch
 
 export async function joinChat(chatId: string, userId: string): Promise<{ error: string | null }> {
   try {
-    // Get current chat
     const { data, error } = await supabase
       .from('openflou_chats')
       .select('*')
       .eq('id', chatId)
       .single();
-
     if (error) throw error;
 
-    // Check if already a participant
     if (data.participants && data.participants.includes(userId)) {
       return { error: 'Already a member' };
     }
 
-    // Add user to participants
     const newParticipants = [...(data.participants || []), userId];
-
     const { error: updateError } = await supabase
       .from('openflou_chats')
-      .update({
-        participants: newParticipants,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ participants: newParticipants, updated_at: new Date().toISOString() })
       .eq('id', chatId);
 
     if (updateError) throw updateError;
-
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
