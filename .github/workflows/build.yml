@@ -1,103 +1,100 @@
-name: Build APK Release (48th Attempt - No JitPack Strategy)
+name: Build Release APK
 on:
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout
+      - name: 🧹 Free Disk Space & Setup Memory Swap
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo swapoff -a || true
+          sudo rm -f /swapfile /swap /mnt/swapfile || true
+          sudo fallocate -l 4G /mnt/swapfile \
+            || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=4096 status=none \
+            || echo "WARNING: swap creation failed, continuing"
+          if [ -f /mnt/swapfile ]; then
+            sudo chmod 600 /mnt/swapfile
+            sudo mkswap /mnt/swapfile
+            sudo swapon /mnt/swapfile
+            echo "Swap ready:"
+          fi
+          free -h
+
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🏗 Setup Node
+      - name: 🏗️ Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          # Без cache: npm — в проєкті немає package-lock.json
 
-      - name: 🏗 Install pnpm
-        run: npm install -g pnpm
-
-      - name: 🏗 Setup Java
+      - name: ☕ Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 📦 Install Dependencies
-        run: |
-          pnpm config set shamefully-hoist true
-          pnpm install --no-frozen-lockfile
-      - name: 🏗 Prebuild Android
-        run: npx expo prebuild --platform android --no-install
+      - name: 📂 Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
-      - name: 🔧 Global Offline Repository Patch
+      - name: 📦 Install Dependencies & Build Tools
         run: |
-          # 1. Настройка системных свойств для ускорения падения при сетевых ошибках
-          echo "systemProp.org.gradle.internal.http.socketTimeout=60000" >> android/gradle.properties
-          echo "systemProp.org.gradle.internal.http.connectionTimeout=60000" >> android/gradle.properties
-          
-          # 2. Очистка всех build.gradle от знака "+" для Stripe
-          # Это предотвращает обращение к серверам за "новой" версией
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:stripe-android:+/com.stripe:stripe-android:21.12.0/g' {} +
-          find . -name "build.gradle" -type f -exec sed -i 's/com.stripe:financial-connections:+/com.stripe:financial-connections:21.12.0/g' {} +
-          # 3. Полная перезапись build.gradle БЕЗ JITPACK
-          cat <<EOF > android/build.gradle
-          buildscript {
-              ext {
-                  buildToolsVersion = "35.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 35
-                  targetSdkVersion = 35
-                  ndkVersion = "27.0.12077973"
-                  kotlinVersion = "2.0.0"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath('com.android.tools.build:gradle:8.8.2')
-                  classpath('com.facebook.react:react-native-gradle-plugin')
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0")
-                  classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.0")
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  // JitPack полностью удален. Если он понадобится другой библиотеке, 
-                  // мы увидим ошибку мгновенно, а не через 10 минут.
-              }
-              
-              configurations.all {
-                  resolutionStrategy {
-                      // Принудительно используем стабильную версию для основных проблемных модулей
-                      force 'com.stripe:stripe-android:21.12.0'
-                      force 'com.stripe:financial-connections:21.12.0'
-                      
-                      // Не даем динамическим версиям провоцировать сетевые запросы
-                      cacheDynamicVersionsFor 0, 'seconds'
-                      cacheChangingModulesFor 0, 'seconds'
-                  }
-              }
-          }
-          EOF
-          # 4. Оптимизация приложения
-          FILE_APP="android/app/build.gradle"
-          sed -i '/defaultConfig {/a \        multiDexEnabled true' $FILE_APP
-          sed -i '/release {/a \            ndk { abiFilters "arm64-v8a" }' $FILE_APP
-      - name: 🚀 Build Release APK
+          npm install --legacy-peer-deps
+          npm install expo-build-properties ajv@^8.12.0 ajv-keywords@^5.1.0 --legacy-peer-deps
         env:
-          NODE_ENV: production
-          _JAVA_OPTIONS: "-Xmx4g"
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: 🏗️ Expo Prebuild (Android)
+        run: npx expo prebuild --platform android --no-install --clean
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: ⚙️ Configure Gradle Flags
+        run: |
+          cat >> android/gradle.properties <<EOF
+          android.enableR8.fullMode=true
+          android.enableResourceOptimizations=true
+          android.nonTransitiveRClass=true
+          reactNativeArchitectures=arm64-v8a
+          hermesEnabled=true
+          org.gradle.jvmargs=-Xmx4096m -XX:+UseParallelGC -XX:MaxMetaspaceSize=1024m
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.workers.max=2
+          EOF
+
+          # Фикс версий Stripe
+          find . -name "build.gradle" -type f \
+            -exec sed -i "s/com.stripe:stripe-android:+/com.stripe:stripe-android:20.37.0/g" {} +
+
+      - name: 🚀 Build Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
-      - name: 📂 Upload Result
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            --no-daemon --stacktrace
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:+UseParallelGC -XX:MaxMetaspaceSize=1024m"
+
+      - name: 📦 Upload Compact APK
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlou-Build-48
-          path: android/app/build/outputs/apk/release/app-release.apk
-          
+          name: App-Release
+          path: android/app/build/outputs/apk/**/*.apk
+          retention-days: 30
