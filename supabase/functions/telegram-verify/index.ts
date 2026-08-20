@@ -526,6 +526,27 @@ Deno.serve(async (req: Request) => {
       return json({ success: true });
     }
 
+    // Change password (from privacy settings — user is authenticated)
+    if (action === 'change_password') {
+      const { userId: cpUserId, currentPassword, newPassword: cpNewPass } = body;
+      if (!cpUserId || !currentPassword || !cpNewPass) return json({ error: 'Missing fields' }, 400);
+      if (cpNewPass.length < 6) return json({ error: 'Password too short' }, 400);
+
+      // Verify current password
+      const { data: cpUser } = await supabase.from('openflou_users').select('password_hash, username').eq('id', cpUserId).single();
+      if (!cpUser) return json({ error: 'User not found' }, 404);
+
+      const encoder = new TextEncoder();
+      const currentHashBuf = await crypto.subtle.digest('SHA-256', encoder.encode(currentPassword + 'openflou_salt_2024'));
+      const currentHash = Array.from(new Uint8Array(currentHashBuf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      if (currentHash !== cpUser.password_hash) return json({ error: 'Current password is incorrect' }, 400);
+
+      const newHashBuf = await crypto.subtle.digest('SHA-256', encoder.encode(cpNewPass + 'openflou_salt_2024'));
+      const newHash = Array.from(new Uint8Array(newHashBuf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      await supabase.from('openflou_users').update({ password_hash: newHash }).eq('id', cpUserId);
+      return json({ success: true });
+    }
+
     // Unlink Telegram
     if (action === 'unlink') {
       await supabase.from('openflou_users').update({
